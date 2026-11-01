@@ -1,0 +1,227 @@
+"""AI 관련 코드 (임베딩, 문화 브리핑 RAG, 활동 카드, 다음 활동 제안).
+
+원칙 (기획서 6-(4)):
+- 개인 선호는 항상 사람이 입력한 값을 그대로 보여주고, LLM이 만들지 않는다.
+- 브리핑의 문화 정보에는 출처를 붙이고, 근거 문서가 없으면 질문만 보여준다.
+- LLM 결과는 서버에서 형식·출처를 검사하고, 실패하면 기본 카드(fallback)를 준다.
+- 외부 LLM에는 이름·연락처 없이 필요한 텍스트만 보낸다.
+
+지금 임베딩은 설치 없이 돌아가는 글자 n-gram 방식(자리표시자)입니다.
+다국어 임베딩 API로 바꾸려면 embed() 한 함수만 교체하면 됩니다.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import math
+import os
+import re
+from collections import Counter
+from functools import lru_cache
+from pathlib import Path
+
+log = logging.getLogger("sookmate.ai")
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+
+# ---------------------------------------------------------------- embeddings
+def embed(text: str) -> dict[str, float]:
+    t = re.sub(r"\s+", "", text.lower())
+    grams = [t[i : i + n] for n in (2, 3) for i in range(len(t) - n + 1)]
+    if not grams and t:
+        grams = [t]
+    counts = Counter(grams)
+    norm = math.sqrt(sum(v * v for v in counts.values())) or 1.0
+    return {k: v / norm for k, v in counts.items()}
+
+
+def cosine(a: dict[str, float], b: dict[str, float]) -> float:
+    if len(a) > len(b):
+        a, b = b, a
+    return sum(v * b.get(k, 0.0) for k, v in a.items())
+
+
+# ----------------------------------------------------------------------- RAG
+@lru_cache(maxsize=1)
+def culture_docs() -> list[dict]:
+    return json.loads((DATA_DIR / "culture_docs.json").read_text(encoding="utf-8"))
+
+
+def retrieve(query: str, k: int = 3) -> list[dict]:
+    q = embed(query)
+    scored = []
+    for d in culture_docs():
+        s = cosine(q, embed(d["title"] + " " + d["text"]))
+        s += 0.3 * sum(1 for t in d["topics"] if t in query)
+        scored.append((s, d))
+    scored.sort(key=lambda x: -x[0])
+    return [d for s, d in scored[:k] if s > 0.05]
+
+
+# ------------------------------------------------------------------------ LLM
+def llm_json(system: str, user: str) -> dict | None:
+    """ANTHROPIC_API_KEY 가 있을 때만 호출. 실패하거나 JSON이 아니면 None."""
+    key = os.getenv("ANTHROPIC_API_KEY")
+    if not key:
+        return None
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=key, timeout=15)
+        r = client.messages.create(
+            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+            max_tokens=700,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        text = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
+        m = re.search(r"\{.*\}", text, re.S)
+        return json.loads(m.group(0)) if m else None
+    except Exception as e:  # 네트워크, 키, 파싱 오류 모두 fallback 으로
+        log.warning("LLM 호출 실패, 기본 카드로 대체: %s", e)
+        return None
+
+
+def _valid_str_list(v, lo: int, hi: int, maxlen: int) -> bool:
+    return (
+        isinstance(v, list)
+        and lo <= len(v) <= hi
+        and all(isinstance(x, str) and 0 < len(x) <= maxlen for x in v)
+    )
+
+
+# ------------------------------------------------------------------ 만나기 전 브리핑
+def default_questions(partner, ex: dict) -> list[str]:
+    qs: list[str] = []
+    for c in ex["common_interests"][:2]:
+        qs.append(f"{c} 관련해서 요즘 관심 있는 게 있어요?")
+    if partner.kind == "international":
+        qs.append("한국에서 가장 낯설었던 건 뭐예요?")
+    else:
+        qs.append("학교 생활에서 처음에 알았으면 좋았을 정보가 뭐였어요?")
+    if ex["partner_topic"]:
+        qs.append(f"{ex['partner_topic']}은(는) 어떻게 알려줄 수 있어요?")
+    return qs[:3]
+
+
+def make_brief(me, partner, ex: dict) -> dict:
+    prefs = list(partner.prefs or [])  # 개인 선호가 최우선. 사람이 입력한 값 그대로.
+    query = " ".join(prefs + ex["common_interests"] + ["첫 만남 식당 카페 주문 대화 시간"])
+    docs = retrieve(query, k=3)
+
+    mode = "fallback"
+    tips: list[dict] = []
+    questions: list[str] = []
+
+    if docs:
+        data = llm_json(
+            "너는 한국 대학 캠퍼스의 교류 만남을 돕는 도우미야. 주어진 문서 안의 내용만 사용해서 "
+            "짧은 안내와 첫 질문을 JSON으로만 답해. 형식: "
+            '{"tips":[{"text":"...","source_id":"문서 id"}],"questions":["..."]}. '
+            "문서에 없는 사실은 쓰지 마. 상대의 개인 선호는 문서보다 우선하니 반드시 존중해.",
+            json.dumps(
+                {
+                    "상대가 공개한 선호": prefs,
+                    "공통 관심사": ex["common_interests"],
+                    "문서": [{"id": d["id"], "title": d["title"], "text": d["text"]} for d in docs],
+                },
+                ensure_ascii=False,
+            ),
+        )
+        ids = {d["id"] for d in docs}
+        if (
+            data
+            and isinstance(data.get("tips"), list)
+            and 1 <= len(data["tips"]) <= 3
+            and all(
+                isinstance(t, dict)
+                and isinstance(t.get("text"), str)
+                and 0 < len(t["text"]) <= 200
+                and t.get("source_id") in ids
+                for t in data["tips"]
+            )
+            and _valid_str_list(data.get("questions"), 1, 4, 80)
+        ):
+            by_id = {d["id"]: d for d in docs}
+            tips = [
+                {"text": t["text"], "source": by_id[t["source_id"]]["source"], "source_id": t["source_id"]}
+                for t in data["tips"]
+            ]
+            questions = data["questions"]
+            mode = "llm"
+
+    if not tips:
+        tips = [{"text": d["text"], "source": d["source"], "source_id": d["id"]} for d in docs[:2]]
+    if not questions:
+        questions = default_questions(partner, ex)
+
+    return {
+        "prefs": prefs,
+        "tips": tips,  # 문서가 없으면 빈 목록: 직접 확인할 질문만 보여줍니다.
+        "questions": questions,
+        "mode": mode,
+        "note": None if tips else "참고할 자료가 없어서 직접 물어볼 질문만 보여드려요.",
+    }
+
+
+# --------------------------------------------------------------------- 활동 카드
+def _pair_topics(me, partner) -> tuple[str | None, str | None]:
+    mine = (sorted(set(me.teach) & set(partner.learn)) or list(me.teach) or [None])[0]
+    theirs = (sorted(set(partner.teach) & set(me.learn)) or list(partner.teach) or [None])[0]
+    return mine, theirs
+
+
+def make_activity_card(me, partner, ex: dict) -> dict:
+    mine, theirs = _pair_topics(me, partner)
+    if not mine or not theirs:
+        return {
+            "title": "서로 궁금한 것 10분씩 묻고 답하기",
+            "mine": {"topic": "내가 궁금한 것", "minutes": 10, "desc": "상대에게 궁금한 것을 10분 동안 물어봐요."},
+            "theirs": {"topic": "상대가 궁금한 것", "minutes": 10, "desc": "상대가 궁금한 것을 10분 동안 알려줘요."},
+            "mode": "fallback",
+        }
+
+    base = {
+        "title": "10분씩 서로 알려주기",
+        "mine": {"topic": mine, "minutes": 10, "desc": f"{mine}에 대해 10분 동안 알려줘요."},
+        "theirs": {"topic": theirs, "minutes": 10, "desc": f"{theirs}에 대해 10분 동안 알려줘요."},
+        "mode": "fallback",
+    }
+    data = llm_json(
+        "두 학생이 서로 하나씩 10분 동안 알려주는 활동 카드를 만들어줘. JSON으로만 답해. "
+        '형식: {"mine":"내가 알려줄 활동 한 문장","theirs":"상대가 알려줄 활동 한 문장"}. '
+        "각 문장은 80자 이하, 주어진 주제만 사용.",
+        json.dumps({"내가 알려줄 주제": mine, "상대가 알려줄 주제": theirs}, ensure_ascii=False),
+    )
+    if (
+        data
+        and all(isinstance(data.get(k), str) and 0 < len(data[k]) <= 80 for k in ("mine", "theirs"))
+    ):
+        base["mine"]["desc"] = data["mine"]
+        base["theirs"]["desc"] = data["theirs"]
+        base["mode"] = "llm"
+    return base
+
+
+# --------------------------------------------------------------- 다음 활동 제안
+def make_next_activity(ex: dict, shared_next: list[str]) -> dict:
+    """교류 노트에서 '공유된 항목'만 근거로 쓴다. 규칙 기반(추후 LLM으로 교체 가능)."""
+    topics = [t.strip() for t in shared_next if t and t.strip()]
+    if topics:
+        return {
+            "title": topics[0],
+            "desc": f"두 사람의 기록을 바탕으로 「{topics[0]}」을(를) 주제로 10분씩 나눠요.",
+            "basis": "shared_notes",
+        }
+    if ex["common_interests"]:
+        c = ex["common_interests"][0]
+        return {
+            "title": f"{c}로 한 번 더 만나기",
+            "desc": f"공유된 기록이 없어서, 겹치는 관심사({c})로 부담 없이 한 번 더 만나 보면 어때요?",
+            "basis": "common_interest",
+        }
+    return {
+        "title": "가볍게 한 번 더 만나기",
+        "desc": "공유된 기록이 아직 없어요. 편한 시간에 짧게 한 번 더 만나 보면 어때요?",
+        "basis": "default",
+    }

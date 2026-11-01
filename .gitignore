@@ -1,0 +1,24 @@
+# 개인정보가 들어 있는 기획서 (팀원 연락처, 학번)
+/*.pdf
+SWAITHON_*.pdf
+
+# 환경 변수와 키
+.env
+*.env.local
+
+# 백엔드
+backend/.venv/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/*.db
+backend/*.sqlite3
+
+# 프론트엔드
+frontend/node_modules/
+frontend/dist/
+
+# 에디터, OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
