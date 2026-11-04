@@ -61,6 +61,7 @@ export interface BasicInput {
 
 export interface Explain {
   common_interests: string[];
+  similar_interests?: { mine: string; theirs: string }[];
   common_times: string[];
   common_langs: string[];
   my_topic: string | null;
