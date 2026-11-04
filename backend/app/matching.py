@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 from .ai import cosine, embed
 from .constants import PROPOSAL_TTL_HOURS, TIME_SLOTS, WEIGHTS
 from .models import Block, Match, User
+from .notifications.service import match_event
+from .scheduling.coordination import serialized
+from .scheduling.reassignment import complete_pending, request_reassignment
 from .util import utcnow, week_of
 
 ACTIVE = ("proposed", "confirmed")  # 이번 주 상한에 포함되는 상태
@@ -106,17 +109,21 @@ def active_count(db: Session, uid: int, week: str) -> int:
     return len(rows)
 
 
+@serialized
 def expire_stale(db: Session) -> int:
     now = utcnow()
-    stale = db.scalars(select(Match).where(Match.status == "proposed", Match.expires_at < now)).all()
+    stale = db.scalars(select(Match).where(Match.status == "proposed", Match.expires_at < now).execution_options(populate_existing=True)).all()
     for m in stale:
         m.status = "expired"
+        match_event(db, m, "match_expired")
+        request_reassignment(db, m.id)
     if stale:
         db.commit()
     return len(stale)
 
 
 # --------------------------------------------------- 3단계: 전체 최적 배정
+@serialized
 def assign(db: Session) -> int:
     """자리가 남은 사용자끼리만 새로 배정한다. 이미 있는 추천·확정은 건드리지 않는다.
 
@@ -127,9 +134,9 @@ def assign(db: Session) -> int:
     now = utcnow()
     week = week_of(now)
 
-    users = db.scalars(select(User)).all()
+    users = db.scalars(select(User).execution_options(populate_existing=True)).all()
     blocked = {frozenset((b.user_id, b.blocked_id)) for b in db.scalars(select(Block))}
-    all_matches = db.scalars(select(Match)).all()
+    all_matches = db.scalars(select(Match).execution_options(populate_existing=True)).all()
     existing = {frozenset((m.domestic_id, m.international_id)) for m in all_matches}
 
     used = {u.id: 0 for u in users}
@@ -149,6 +156,8 @@ def assign(db: Session) -> int:
                 continue
             edges.append((d, i, score_pair(d, i)))
     if not edges:
+        complete_pending(db)
+        db.commit()
         return 0
 
     dom_node = {d.id: 1 + k for k, d in enumerate(doms)}
@@ -172,10 +181,10 @@ def assign(db: Session) -> int:
     if smcf.solve_max_flow_with_min_cost() != smcf.OPTIMAL:
         return 0
 
-    created = 0
+    proposals = []
     for arc, d, i, s in edge_arcs:
         if smcf.flow(arc) > 0:
-            db.add(
+            proposals.append(
                 Match(
                     domestic_id=d.id,
                     international_id=i.id,
@@ -189,9 +198,13 @@ def assign(db: Session) -> int:
                     expires_at=now + timedelta(hours=PROPOSAL_TTL_HOURS),
                 )
             )
-            created += 1
+    db.add_all(proposals)
+    db.flush()  # 알림과 같은 트랜잭션에서 새 Match ID를 확보한다.
+    for proposal in proposals:
+        match_event(db, proposal, "match_proposed")
+    complete_pending(db)
     db.commit()
-    return created
+    return len(proposals)
 
 
 # ------------------------------------------------------ 4단계: 수락·거절·취소
@@ -201,22 +214,26 @@ def _participant(m: Match, uid: int) -> None:
 
 
 def _locked(db: Session, match_id: int) -> Match:
-    m = db.scalars(select(Match).where(Match.id == match_id).with_for_update()).first()
+    m = db.scalars(select(Match).where(Match.id == match_id).with_for_update().execution_options(populate_existing=True)).first()
     if not m:
         raise MatchError("만남을 찾을 수 없어요.", 404)
     return m
 
 
+@serialized
 def accept(db: Session, match_id: int, uid: int) -> Match:
     m = _locked(db, match_id)
     _participant(m, uid)
     if m.status == "proposed" and m.expires_at < utcnow():
         m.status = "expired"
+        match_event(db, m, "match_expired")
+        request_reassignment(db, m.id)
         db.commit()
         assign(db)
         raise MatchError("추천 기한이 지났어요. 새 추천을 확인해 주세요.", 410)
     if m.status != "proposed":
         raise MatchError("이미 처리된 추천이에요.")
+    accepted_before = m.domestic_accepted if uid == m.domestic_id else m.international_accepted
     if uid == m.domestic_id:
         m.domestic_accepted = True
     else:
@@ -229,32 +246,43 @@ def accept(db: Session, match_id: int, uid: int) -> Match:
         if active_count(db, u, m.week) > cap:
             db.rollback()
             raise MatchError("이번 주 만남 상한을 넘을 수 없어요.")
+    if not accepted_before:
+        match_event(db, m, "match_accepted", uid)
+        if m.status == "confirmed":
+            match_event(db, m, "match_confirmed")
     db.commit()
     return m
 
 
+@serialized
 def reject(db: Session, match_id: int, uid: int) -> Match:
     m = _locked(db, match_id)
     _participant(m, uid)
     if m.status != "proposed":
         raise MatchError("이미 처리된 추천이에요.")
     m.status = "rejected"
+    match_event(db, m, "match_rejected", uid)
+    request_reassignment(db, m.id)
     db.commit()
     assign(db)  # 자리가 풀렸으니 미매칭자만 다시 배정
     return m
 
 
+@serialized
 def cancel(db: Session, match_id: int, uid: int) -> Match:
     m = _locked(db, match_id)
     _participant(m, uid)
     if m.status != "confirmed":
         raise MatchError("확정된 만남만 취소할 수 있어요.")
     m.status = "cancelled"
+    match_event(db, m, "match_cancelled", uid)
+    request_reassignment(db, m.id)
     db.commit()
     assign(db)
     return m
 
 
+@serialized
 def block_user(db: Session, uid: int, target_id: int) -> None:
     if uid == target_id or not db.get(User, target_id):
         raise MatchError("차단할 수 없는 사용자예요.", 400)
@@ -262,8 +290,10 @@ def block_user(db: Session, uid: int, target_id: int) -> None:
     if not already:
         db.add(Block(user_id=uid, blocked_id=target_id))
     pair = {uid, target_id}
-    for m in db.scalars(select(Match).where(Match.status.in_(ACTIVE))):
+    for m in db.scalars(select(Match).where(Match.status.in_(ACTIVE)).execution_options(populate_existing=True)):
         if {m.domestic_id, m.international_id} == pair:
             m.status = "cancelled"
+            # 차단 사실은 상대에게 알리지 않는다.
+            request_reassignment(db, m.id)
     db.commit()
     assign(db)
