@@ -11,3 +11,5 @@ pytest>=8
 httpx>=0.27
 # 선택: PostgreSQL을 쓰려면 DATABASE_URL을 postgresql+psycopg://... 로 바꾸고 아래를 설치하세요.
 # psycopg[binary]>=3.2
+# 선택: 다국어 임베딩(EMBED_BACKEND=st). 없으면 n-gram으로 동작합니다.
+# sentence-transformers>=3.0

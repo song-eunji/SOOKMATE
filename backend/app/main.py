@@ -27,6 +27,7 @@ DEV_MODE = os.getenv("DEV_MODE", "1") == "1"
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     ensure_columns()
+    ai.warm_up()
     with SessionLocal() as db:
         if not db.scalars(select(User).limit(1)).first():
             seed_demo(db)

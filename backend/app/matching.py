@@ -10,7 +10,7 @@ from ortools.graph.python import min_cost_flow
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .ai import cosine, embed
+from .ai import embed, sim, set_sim
 from .constants import PROPOSAL_TTL_HOURS, TIME_SLOTS, WEIGHTS
 from .models import Block, Match, User
 from .util import utcnow, week_of
@@ -40,38 +40,50 @@ def hard_filter(a: User, b: User, blocked: set[frozenset]) -> bool:
 
 
 # --------------------------------------------------------------- 2단계: 점수
-def _text(xs: list[str]) -> str:
-    return " ".join(sorted(xs))
-
-
 def score_pair(a: User, b: User) -> dict:
     """I 관심사 유사도, T 공통 시간 비율, L 언어 교환 충족도, R 양방향 적합도. 국적·학과는 쓰지 않는다."""
-    I = cosine(embed(_text(a.interests)), embed(_text(b.interests)))
+    I = set_sim(a.interests, b.interests)
     n = min(len(a.times), len(b.times))
     T = len(common(a.times, b.times)) / n if n else 0.0
     ln = min(len(a.langs), len(b.langs))
     L = min(1.0, len(common(a.langs, b.langs)) / ln) if ln else 0.0
-    R = (
-        cosine(embed(_text(a.teach)), embed(_text(b.learn)))
-        + cosine(embed(_text(b.teach)), embed(_text(a.learn)))
-    ) / 2
+    R = (set_sim(a.teach, b.learn) + set_sim(b.teach, a.learn)) / 2
     total = WEIGHTS["I"] * I + WEIGHTS["T"] * T + WEIGHTS["L"] * L + WEIGHTS["R"] * R
     return {"I": round(I, 4), "T": round(T, 4), "L": round(L, 4), "R": round(R, 4), "total": round(total, 4)}
+
+
+SIMILAR_MIN = 0.4  # ai.sim 기준, 이 이상이면 비슷한 관심사로 보여 준다
+
+
+def similar_pairs(mine: list[str], theirs: list[str]) -> list[dict]:
+    """글자는 다르지만 뜻이 가까운 관심사 쌍 (예: 음악 / music). 같은 글자는 제외."""
+    same = set(mine) & set(theirs)
+    left = [x for x in mine if x not in same]
+    right = [y for y in theirs if y not in same]
+    pairs = []
+    for x in left:
+        s, y = max(((sim(embed(x), embed(y)), y) for y in right), default=(0.0, None))
+        if y and s >= SIMILAR_MIN:
+            pairs.append({"mine": x, "theirs": y})
+            right.remove(y)
+    return pairs
 
 
 def explain(me: User, other: User) -> dict:
     """추천 이유는 실제로 겹치는 항목만으로 만든다. 없는 근거는 쓰지 않는다."""
     ints = common(me.interests, other.interests)
+    similar = similar_pairs(me.interests, other.interests)
+    shown = ints + [f"{p['mine']}({p['theirs']})" for p in similar]
     times = sorted(common(me.times, other.times), key=lambda t: TIME_SLOTS.index(t) if t in TIME_SLOTS else 99)
     my_topic = (common(me.teach, other.learn) or [None])[0]
     partner_topic = (common(other.teach, me.learn) or [None])[0]
     mutual = bool(my_topic and partner_topic)
 
     ov = ""
-    if ints and times:
-        ov = f"{'·'.join(ints)} 관심사와 {times[0]} 시간이 겹"
-    elif ints:
-        ov = f"{'·'.join(ints)} 관심사가 겹"
+    if shown and times:
+        ov = f"{'·'.join(shown)} 관심사와 {times[0]} 시간이 겹"
+    elif shown:
+        ov = f"{'·'.join(shown)} 관심사가 겹"
     elif times:
         ov = f"{times[0]} 시간이 겹"
     mu = "서로 원하는 주제를 알려줄 수 있어요"
@@ -85,6 +97,7 @@ def explain(me: User, other: User) -> dict:
         reason = "겹치는 조건은 적지만 만날 수 있는 후보예요."
     return {
         "common_interests": ints,
+        "similar_interests": similar,
         "common_times": times,
         "common_langs": common(me.langs, other.langs),
         "my_topic": my_topic,
