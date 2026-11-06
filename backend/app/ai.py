@@ -6,8 +6,8 @@
 - LLM 결과는 서버에서 형식·출처를 검사하고, 실패하면 기본 카드(fallback)를 준다.
 - 외부 LLM에는 이름·연락처 없이 필요한 텍스트만 보낸다.
 
-지금 임베딩은 설치 없이 돌아가는 글자 n-gram 방식(자리표시자)입니다.
-다국어 임베딩 API로 바꾸려면 embed() 한 함수만 교체하면 됩니다.
+임베딩은 EMBED_BACKEND 로 고릅니다. 기본은 설치 없이 도는 글자 n-gram이고,
+st 로 바꾸면 다국어 모델(sentence-transformers)을 씁니다.
 """
 from __future__ import annotations
 
@@ -16,16 +16,25 @@ import logging
 import math
 import os
 import re
+import threading
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
+
+from .constants import INTERESTS, TOPICS
 
 log = logging.getLogger("sookmate.ai")
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 # ---------------------------------------------------------------- embeddings
-def embed(text: str) -> dict[str, float]:
+# ngram 또는 st(다국어 모델). st 를 못 쓰면 ngram 으로 돌아간다.
+EMBED_BACKEND = os.getenv("EMBED_BACKEND", "ngram")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
+_st_failed = False
+
+
+def embed_ngram(text: str) -> dict[str, float]:
     t = re.sub(r"\s+", "", text.lower())
     grams = [t[i : i + n] for n in (2, 3) for i in range(len(t) - n + 1)]
     if not grams and t:
@@ -35,10 +44,74 @@ def embed(text: str) -> dict[str, float]:
     return {k: v / norm for k, v in counts.items()}
 
 
-def cosine(a: dict[str, float], b: dict[str, float]) -> float:
-    if len(a) > len(b):
-        a, b = b, a
-    return sum(v * b.get(k, 0.0) for k, v in a.items())
+_st_lock = threading.Lock()
+
+
+@lru_cache(maxsize=1)
+def _st_model():
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(EMBED_MODEL)
+
+
+@lru_cache(maxsize=4096)
+def embed_st(text: str) -> tuple[float, ...]:
+    prefix = "query: " if "e5" in EMBED_MODEL.lower() else ""  # e5 모델은 접두어가 필요하다
+    with _st_lock:  # 요청이 동시에 와도 모델 로딩과 계산이 겹치지 않게
+        v = _st_model().encode(prefix + text[:100], normalize_embeddings=True)
+    return tuple(float(x) for x in v)
+
+
+def embed(text: str):
+    global _st_failed
+    if EMBED_BACKEND == "st" and not _st_failed:
+        try:
+            return embed_st(text)
+        except Exception as e:
+            _st_failed = True
+            log.warning("다국어 임베딩을 못 써서 n-gram으로 대체: %s", e)
+    return embed_ngram(text)
+
+
+def warm_up() -> None:
+    """서버를 켤 때 모델을 미리 불러오고 선택지 칩의 벡터를 계산해 둔다."""
+    if EMBED_BACKEND == "st":
+        for t in INTERESTS + TOPICS:
+            embed(t)
+
+
+def cosine(a, b) -> float:
+    if isinstance(a, dict) and isinstance(b, dict):
+        if len(a) > len(b):
+            a, b = b, a
+        return sum(v * b.get(k, 0.0) for k, v in a.items())
+    return sum(x * y for x, y in zip(a, b))
+
+
+# 모델마다 코사인이 퍼지는 범위가 달라서 하한~상한을 0~1로 늘려 쓴다.
+# 값은 scripts/eval_quality.py 로 정했다.
+_RANGES = {"bge-m3": (0.6, 0.8), "e5": (0.85, 0.92)}
+_lo, _hi = next((r for k, r in _RANGES.items() if k in EMBED_MODEL.lower()), (0.6, 0.8))
+SIM_FLOOR = float(os.getenv("EMBED_SIM_FLOOR", _lo))
+SIM_CEIL = float(os.getenv("EMBED_SIM_CEIL", _hi))
+
+
+def sim(a, b) -> float:
+    """0~1 유사도. n-gram은 코사인 그대로."""
+    c = cosine(a, b)
+    if isinstance(a, dict):
+        return c
+    return min(1.0, max(0.0, (c - SIM_FLOOR) / (SIM_CEIL - SIM_FLOOR)))
+
+
+def set_sim(xs: list[str], ys: list[str]) -> float:
+    """두 목록의 유사도. 항목마다 상대 목록에서 가장 비슷한 것을 찾아 평균낸다."""
+    if not xs or not ys:
+        return 0.0
+    ex, ey = [embed(x) for x in xs], [embed(y) for y in ys]
+    xy = sum(max(sim(a, b) for b in ey) for a in ex) / len(ex)
+    yx = sum(max(sim(a, b) for a in ex) for b in ey) / len(ey)
+    return (xy + yx) / 2
 
 
 # ----------------------------------------------------------------------- RAG
@@ -51,7 +124,7 @@ def retrieve(query: str, k: int = 3) -> list[dict]:
     q = embed(query)
     scored = []
     for d in culture_docs():
-        s = cosine(q, embed(d["title"] + " " + d["text"]))
+        s = sim(q, embed(d["title"] + " " + d["text"]))
         s += 0.3 * sum(1 for t in d["topics"] if t in query)
         scored.append((s, d))
     scored.sort(key=lambda x: -x[0])
