@@ -478,6 +478,7 @@ def _shared_activity_context(db, match_id, me):
     m = my_match(db, match_id, me, confirmed=True)
     partner = views.partner_of(db, m, me.id)
     shared = []
+    entries = []
     for author in sorted((me, partner), key=lambda user: user.id):
         n = _note(db, match_id, author.id)
         if n:
@@ -485,7 +486,11 @@ def _shared_activity_context(db, match_id, me):
                 value = getattr(n, field)
                 if getattr(n, flag) and value and value.strip():
                     shared.append(value.strip())
-    return matching.explain(me, partner), shared
+                    entries.append({"id": f"N{len(entries) + 1}", "participant": "A" if author.id == min(me.id, partner.id) else "B",
+                                    "field": field, "text": value.strip()})
+    ex = matching.explain(me, partner)
+    ex["shared_entries"] = entries
+    return ex, shared
 
 
 @app.get("/api/matches/{match_id}/next-activity")

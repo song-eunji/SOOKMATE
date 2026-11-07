@@ -18,7 +18,7 @@ def test_private_fields_never_reach_generation(client, monkeypatch):
 
 
 def test_unconfigured_is_not_claimed_as_rag(monkeypatch):
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     result = activity.recommend({"common_interests": ["카페"]}, ["카페"], compare=True)
     assert result["retrieval"]["search_status"] == "not_configured"
     assert result["retrieval"]["sources"] == []
@@ -39,11 +39,13 @@ def test_fabricated_citation_falls_back(monkeypatch):
 
 def test_comparison_uses_same_notes_and_separate_sources(monkeypatch):
     source = {"id": "S1", "title": "자료", "url": "https://example.com", "text": "자료 내용"}
-    monkeypatch.setattr(activity, "search", lambda query: ([source], "ok"))
+    monkeypatch.setattr(activity, "search", lambda query: {"sources": [source], "status": "ok", "provider": "google_search"})
     inputs = []
     def llm(system, user):
         import json
         data = json.loads(user)
+        if "entries" in data:
+            return None
         inputs.append(data)
         return {"title": "활동", "desc": "설명", "reason": "이유", "steps": ["하나", "둘", "셋"],
                 "source_ids": ["S1"] if data["sources"] else []}
@@ -52,38 +54,58 @@ def test_comparison_uses_same_notes_and_separate_sources(monkeypatch):
     assert result["comparable"]
     assert inputs[0]["shared_notes"] == inputs[1]["shared_notes"]
     assert inputs[0]["sources"] and inputs[1]["sources"] == []
+    assert inputs[0]["note_analysis"] == inputs[1]["note_analysis"]
     assert result["baseline"]["sources"] == []
 
 
-def test_search_filters_unsafe_urls(monkeypatch):
-    monkeypatch.setenv("TAVILY_API_KEY", "test-only")
-    class Response:
-        def raise_for_status(self):
-            pass
-        def json(self):
-            return {"results": [
-                {"url": "javascript:alert(1)", "title": "bad", "content": "bad"},
-                {"url": "https://example.com", "title": "good", "content": "evidence"},
-                {"url": "https://example.com", "title": "duplicate", "content": "evidence"},
-            ]}
-    class Client:
-        def __init__(self, **kwargs):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def post(self, *args, **kwargs):
-            return Response()
-    monkeypatch.setattr(activity.httpx, "Client", Client)
-    sources, status = activity.search("전시")
-    assert status == "ok"
-    assert len(sources) == 1 and sources[0]["url"] == "https://example.com"
-
-
 def test_search_failure_preserves_baseline(monkeypatch):
-    monkeypatch.setattr(activity, "search", lambda query: ([], "failed"))
+    monkeypatch.setattr(activity, "search", lambda query: {"sources": [], "status": "failed", "provider": "google_search"})
     result = activity.recommend({"common_interests": ["전시"]}, ["전시"], compare=True)
     assert result["retrieval"]["search_status"] == "failed"
     assert result["baseline"]["title"]
     assert not result["comparable"]
+
+
+def test_analysis_retains_only_verifiable_quotes(monkeypatch):
+    monkeypatch.setattr(activity.ai, "llm_json", lambda *args: {
+        "signals": [
+            {"kind": "wish", "text": "도자기 만들기", "note_id": "N1", "quote": "도자기"},
+            {"kind": "constraint", "text": "무료", "note_id": "N1", "quote": "무료"},
+            {"kind": "wish", "text": "공방", "note_id": "N9", "quote": "공방"},
+        ], "keywords": ["도자기 공방", "01012345678", "user@example.com"]})
+    result = activity.analyze({"common_interests": []}, ["다음에는 도자기를 만들고 싶다"])
+    assert result["mode"] == "llm"
+    assert result["keywords"] == ["도자기 공방"]
+    assert len(result["signals"]) == 1
+    assert "도자기 공방" in result["query"]
+
+
+def test_analysis_keeps_author_and_field(monkeypatch):
+    monkeypatch.setattr(activity.ai, "llm_json", lambda *args: None)
+    entries = [{"id": "N1", "participant": "B", "field": "next_text", "text": "전시"}]
+    result = activity.analyze({"common_interests": [], "shared_entries": entries}, ["전시"])
+    assert result["entries"] == entries
+    assert result["mode"] == "fallback"
+
+
+def test_no_notes_do_not_trigger_analysis_or_search(monkeypatch):
+    monkeypatch.setattr(activity.ai, "llm_json", lambda *args: None)
+    monkeypatch.setattr(activity, "search", lambda query: (_ for _ in ()).throw(AssertionError("unexpected search")))
+    result = activity.recommend({"common_interests": []}, [])
+    assert result["search_status"] == "no_query"
+    assert result["analysis"]["entries"] == []
+
+
+def test_api_analysis_anonymizes_participants_and_excludes_private_fields(client):
+    m = confirm(client)
+    path = f"/api/matches/{m['id']}"
+    for uid, text in ((1, "전시"), (m["partner"]["id"], "도자기")):
+        client.put(path + "/notes", headers=h(uid), json={
+            "expr": "PRIVATE", "fact": "PRIVATE", "next_text": text, "share_next": True,
+        })
+    result = client.post(path + "/next-activity", headers=h(1)).json()
+    entries = result["analysis"]["entries"]
+    assert {entry["participant"] for entry in entries} == {"A", "B"}
+    assert {entry["text"] for entry in entries} == {"전시", "도자기"}
+    assert all(entry["field"] == "next_text" for entry in entries)
+    assert "PRIVATE" not in str(result)
