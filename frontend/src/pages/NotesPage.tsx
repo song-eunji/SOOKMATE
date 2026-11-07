@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { api } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { api, compareActivities } from "../api";
 import { Lock, MatchPicker } from "../components";
 import { useI18n } from "../i18n";
-import type { MatchView, NextActivity, NoteData, NotesResponse } from "../types";
+import type { ActivityComparison, MatchView, NextActivity, NoteData, NotesResponse } from "../types";
 
 interface Props {
   active: MatchView | null;
@@ -25,12 +25,23 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
   const [note, setNote] = useState<NoteData>(EMPTY);
   const [theirs, setTheirs] = useState<NotesResponse["partner_shared"]>(null);
   const [next, setNext] = useState<NextActivity | null>(null);
+  const [comparison, setComparison] = useState<ActivityComparison | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [ratings, setRatings] = useState<Record<string, string>>({});
+  const requestVersion = useRef(0);
   const [saved, setSaved] = useState(false);
   const matchId = active?.id ?? null;
 
   useEffect(() => {
     if (matchId === null) return;
     let alive = true;
+    requestVersion.current += 1;
+    setComparison(null);
+    setRatings({});
+    setBusy(false);
+    setError("");
+    setTheirs(null);
     setNote(EMPTY);
     setNext(null);
     setSaved(false);
@@ -42,12 +53,13 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
         if (r.mine) {
           setNote(r.mine);
           setSaved(true);
-          api.nextActivity(matchId).then((n) => alive && setNext(n));
+          api.nextActivity(matchId).then((n) => alive && setNext(n)).catch((e) => alive && flash((e as Error).message));
         }
       })
       .catch((e) => flash((e as Error).message));
     return () => {
       alive = false;
+      requestVersion.current += 1;
     };
   }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -56,6 +68,31 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
   }
   const name = active.partner.name;
   const empty = !note.expr.trim() && !note.fact.trim() && !note.next_text.trim();
+
+  const compare = async () => {
+    const version = ++requestVersion.current;
+    setBusy(true);
+    setError("");
+    setComparison(null);
+    setRatings({});
+    try {
+      const result = await compareActivities(active.id);
+      if (version === requestVersion.current) setComparison(result);
+    } catch (e) {
+      if (version === requestVersion.current) setError((e as Error).message);
+    } finally {
+      if (version === requestVersion.current) setBusy(false);
+    }
+  };
+
+  const invalidate = () => {
+    requestVersion.current += 1;
+    setComparison(null);
+    setRatings({});
+    setError("");
+    setBusy(false);
+    setSaved(false);
+  };
 
   const save = async () => {
     try {
@@ -71,6 +108,7 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
   const remove = async () => {
     try {
       await api.deleteNote(active.id);
+      invalidate();
       setNote(EMPTY);
       setNext(null);
       setSaved(false);
@@ -103,7 +141,7 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
                 maxLength={200}
                 placeholder={t(f.ph)}
                 onChange={(e) => {
-                  setSaved(false);
+                  invalidate();
                   setNote((n) => ({ ...n, [f.key]: e.target.value }));
                 }}
               />
@@ -117,7 +155,7 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
                 aria-checked={note[f.share]}
                 aria-label={t("{label} 공유", { label: t(f.label) })}
                 onClick={() => {
-                  setSaved(false);
+                  invalidate();
                   setNote((n) => ({ ...n, [f.share]: !n[f.share] }));
                 }}
               />
@@ -148,7 +186,54 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
         <div className="banner ok">{t("노트를 저장했어요. 삭제는 언제든 할 수 있어요.")}</div>
       )}
 
-      {next && (
+      {saved && (
+        <section className="sec" aria-busy={busy}>
+          <h2>노트에서 다음 만남으로</h2>
+          <p className="lead">두 사람이 공유한 항목으로 활동 자료를 찾고, 검색 없는 추천과 비교해요.</p>
+          <button className="btn" disabled={busy} onClick={compare}>
+            {busy ? "자료를 찾고 두 추천을 만드는 중…" : "자료 검색하고 추천 비교하기"}
+          </button>
+          {busy && <p role="status">최대 1분 정도 걸릴 수 있어요.</p>}
+          {error && <p role="alert">{error} 다시 시도해 주세요.</p>}
+          {comparison && <>
+            <p className="banner">{comparison.comparable
+              ? "같은 노트와 모델로 생성했어요. 각 항목을 1~5점으로 평가해 보세요."
+              : "비교 실험 미완료: 검색 자료를 인용한 AI 추천과 검색 없는 AI 추천이 모두 필요해요. 기본 제안은 평가 점수로 해석하지 마세요."}</p>
+            <p>검색 상태: {({ok: "검색 완료", not_configured: "검색 키 미설정", failed: "검색 실패", empty: "검색 결과 없음", no_query: "관련 검색어 없음"} as Record<string, string>)[comparison.retrieval.search_status ?? ""]}</p>
+            {comparison.retrieval.query && <p><small>검색어: {comparison.retrieval.query}</small></p>}
+            {(["retrieval", "baseline"] as const).map((mode) => {
+              const activity = comparison[mode];
+              return <article className="act" key={mode}>
+                <small>{mode === "retrieval" ? "검색 기반 추천" : "검색 없는 추천"} · {activity.generation_mode === "llm" ? "AI 생성" : "기본 제안"} · {(activity.generation_ms / 1000).toFixed(1)}초</small>
+                <h3>{activity.title}</h3>
+                <p>{activity.desc}</p>
+                <p><strong>추천 이유</strong> · {activity.reason}</p>
+                <ol>{activity.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>
+                {activity.sources.map((source) => <details key={source.id}>
+                  <summary>참고 자료 [{source.id}] {source.title}</summary>
+                  <p>{source.text}</p>
+                  <a href={source.url} target="_blank" rel="noopener noreferrer">원문 확인하기 ↗</a>
+                </details>)}
+                {comparison.comparable && comparison.rubric.map((criterion, index) => <div className="field" key={criterion}>
+                  <label htmlFor={`rating-${mode}-${index}`}>{criterion}</label>
+                  <select id={`rating-${mode}-${index}`} value={ratings[`${mode}-${index}`] ?? ""}
+                    onChange={(e) => setRatings((old) => ({...old, [`${mode}-${index}`]: e.target.value}))}>
+                    <option value="">평가 선택</option>
+                    {[1, 2, 3, 4, 5].map((score) => <option key={score} value={score}>{score}점</option>)}
+                  </select>
+                </div>)}
+              </article>;
+            })}
+            <button className="btn ghost" onClick={() => {
+              const url = URL.createObjectURL(new Blob([JSON.stringify({match_id: active.id, evaluated_at: new Date().toISOString(), ...comparison, ratings}, null, 2)], {type: "application/json"}));
+              const link = document.createElement("a"); link.href = url; link.download = `activity-evaluation-${active.id}.json`; link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}>추천·평가 결과 내려받기</button>
+          </>}
+        </section>
+      )}
+
+      {next && !comparison && (
         <section className="sec">
           <h2>{t("다음 활동 제안")}</h2>
           <div className="act">

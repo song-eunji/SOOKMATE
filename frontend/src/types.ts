@@ -137,3 +137,22 @@ export interface NextActivity {
   desc: string;
   basis: "shared_notes" | "common_interest" | "default";
 }
+
+export interface ActivitySource { id: string; title: string; url: string; text: string }
+export interface GeneratedActivity extends NextActivity {
+  reason: string;
+  steps: string[];
+  sources: ActivitySource[];
+  source_ids: string[];
+  generation_mode: "llm" | "fallback";
+  generation_ms: number;
+  search_status?: string;
+  query?: string;
+  retrieved_sources?: ActivitySource[];
+}
+export interface ActivityComparison {
+  retrieval: GeneratedActivity;
+  baseline: GeneratedActivity;
+  comparable: boolean;
+  rubric: string[];
+}
