@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Lock, MatchPicker } from "../components";
+import { Lock, MatchPicker, TranslateButton } from "../components";
 import { useI18n } from "../i18n";
 import type { MatchView, NextActivity, NoteData, NotesResponse } from "../types";
 
@@ -133,6 +133,7 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
             {sharedItems.map((s) => (
               <li key={s.label}>
                 {s.value}
+                <TranslateButton text={s.value} />
                 <small>{s.label}</small>
               </li>
             ))}

@@ -251,3 +251,11 @@ h2.plain { margin-bottom: 10px; }
 .langpick { display: flex; flex-wrap: wrap; gap: 6px; }
 .langpick .chip { padding: 5px 13px; font-size: 13px; }
 nav button { white-space: nowrap; }
+
+/* 번역 보기 */
+.tr { display: block; margin-top: 4px; }
+.tr-btn { background: none; border: 0; padding: 0; font-size: 12px; color: var(--muted); text-decoration: underline; cursor: pointer; }
+.tr-btn:disabled { cursor: default; opacity: 0.7; }
+.tr-text { display: block; margin-top: 3px; font-size: 13px; line-height: 1.45; color: inherit; opacity: 0.85; }
+.tr-fail { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+.line.them .tr { max-width: 75%; }

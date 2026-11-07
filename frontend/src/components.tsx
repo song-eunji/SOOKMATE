@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { api } from "./api";
 import { useI18n } from "./i18n";
 import type { MatchView } from "./types";
 
@@ -137,5 +138,49 @@ export function MatchPicker({ matches, activeId, onPick }: { matches: MatchView[
         </Chip>
       ))}
     </div>
+  );
+}
+
+// 같은 문장을 같은 언어로 다시 번역하지 않도록 화면에서도 기억해 둔다
+const trCache = new Map<string, string>();
+
+/** 사람이 쓴 글 아래에 붙이는 '번역 보기' 버튼. 원문은 그대로 두고 번역문만 아래에 보여준다. */
+export function TranslateButton({ text }: { text: string }) {
+  const { t, lang } = useI18n();
+  const key = `${lang}\u0000${text}`;
+  const [shown, setShown] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (!text.trim()) return null;
+
+  const toggle = async () => {
+    if (shown !== null) return setShown(null);
+    const hit = trCache.get(key);
+    if (hit) return setShown(hit);
+    setBusy(true);
+    setFailed(false);
+    try {
+      const r = await api.translate(text);
+      if (r.translated) {
+        trCache.set(key, r.text);
+        setShown(r.text);
+      } else {
+        setFailed(true);
+      }
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span className="tr">
+      <button type="button" className="tr-btn" onClick={toggle} disabled={busy}>
+        {busy ? t("번역하는 중") : shown !== null ? t("원문만 보기") : t("번역 보기")}
+      </button>
+      {shown !== null && <span className="tr-text">{shown}</span>}
+      {failed && <span className="tr-fail">{t("지금은 번역할 수 없어요")}</span>}
+    </span>
   );
 }

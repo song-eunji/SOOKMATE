@@ -111,6 +111,12 @@ export interface ActivitySide {
   desc: string;
 }
 
+export interface TranslateResult {
+  text: string;
+  translated: boolean;
+  lang: string;
+}
+
 export interface ActivityCard {
   title: string;
   mine: ActivitySide;
