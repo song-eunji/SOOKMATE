@@ -27,6 +27,7 @@ def user_me(db: Session, u: User) -> dict:
         "times": u.times,
         "prefs": u.prefs,
         "nationality": u.nationality,
+        "email": u.email,
         "onboarded": u.onboarded,
         "ui_lang": u.ui_lang or "ko",
         "weekly_cap": u.weekly_cap,

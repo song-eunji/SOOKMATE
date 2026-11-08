@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { Avatar } from "../components";
 import { isLang, useI18n } from "../i18n";
-import type { Me, Options } from "../types";
+import type { Kind, Me, Options } from "../types";
 
 interface Props {
   me: Me;
@@ -18,9 +18,11 @@ export default function BasicForm({ me, opts, first, onSaved, onCancel, flash }:
   const { t, lang, setLang } = useI18n();
   const [name, setName] = useState(me.onboarded ? me.name : "");
   const [bio, setBio] = useState(me.bio);
+  const needKind = !me.kind; // 새로 가입한 사람만 처음 한 번 고른다
+  const [kind, setKind] = useState<Kind | "">("");
   const [saving, setSaving] = useState(false);
 
-  const ok = name.trim().length > 0;
+  const ok = name.trim().length > 0 && (!needKind || kind !== "");
 
   // 언어는 누르는 즉시 화면에 적용하고 계정에도 저장한다 (저장이 안 돼도 이 기기에서는 바뀐 채로 둔다)
   const pickLang = (code: string) => {
@@ -32,7 +34,7 @@ export default function BasicForm({ me, opts, first, onSaved, onCancel, flash }:
   const save = async () => {
     setSaving(true);
     try {
-      await api.saveBasic({ name, bio });
+      await api.saveBasic({ name, bio, ...(needKind && kind ? { kind } : {}) });
       flash(first ? "반가워요! 이제 프로필을 채워 볼까요?" : "저장했어요.");
       await onSaved();
     } catch (e) {
@@ -61,6 +63,20 @@ export default function BasicForm({ me, opts, first, onSaved, onCancel, flash }:
           <span className="m">{bio.trim() || t("한 줄 소개")}</span>
         </div>
       </div>
+
+      {needKind && (
+        <div className="field">
+          <label>{t("나는 어떤 학생인가요?")}</label>
+          <div className="kindpick" role="radiogroup" aria-label={t("나는 어떤 학생인가요?")}>
+            {(["domestic", "international"] as Kind[]).map((k) => (
+              <button key={k} type="button" role="radio" aria-checked={kind === k} className={`chip ${kind === k ? "on" : ""}`} onClick={() => setKind(k)}>
+                {k === "domestic" ? t("국내 학생") : t("유학생")}
+              </button>
+            ))}
+          </div>
+          <span className="hint">{t("한 번 정하면 바꿀 수 없어요.")}</span>
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor="nick">{t("닉네임")}</label>
