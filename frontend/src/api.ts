@@ -10,6 +10,7 @@ import type {
   NoteData,
   NotesResponse,
   Options,
+  TranslateResult,
   ProfileInput,
   UserLite,
 } from "./types";
@@ -79,6 +80,7 @@ export const api = {
   saveNote: (id: number, n: NoteData) => req<NoteData>(`/matches/${id}/notes`, { method: "PUT", body: JSON.stringify(n) }),
   deleteNote: (id: number) => req<{ ok: boolean }>(`/matches/${id}/notes`, { method: "DELETE" }),
   nextActivity: (id: number) => req<NextActivity>(`/matches/${id}/next-activity`),
+  translate: (text: string) => post<TranslateResult>("/translate", { text }),
   block: (userId: number) => post<{ ok: boolean }>("/blocks", { user_id: userId }),
   report: (userId: number, matchId: number, reason: string) =>
     post<{ ok: boolean }>("/reports", { user_id: userId, match_id: matchId, reason }),

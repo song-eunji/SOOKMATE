@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, wsUrl } from "../api";
-import { Avatar } from "../components";
+import { Avatar, TranslateButton } from "../components";
 import { useI18n } from "../i18n";
 import type { ChatMessage, MatchView, Me } from "../types";
 
@@ -117,6 +117,7 @@ export default function ChatPage({ me, active, onBack, onChanged, flash }: Props
           <div>
             <b>{partner.name}</b>
             <span className="m">{partner.bio || t("연락처 공개 없이 대화해요")}</span>
+            {partner.bio && <TranslateButton text={partner.bio} />}
           </div>
         </div>
         <button className="link" onClick={() => setMenu((v) => !v)}>
@@ -152,7 +153,10 @@ export default function ChatPage({ me, active, onBack, onChanged, flash }: Props
                   <time>{clock(m.created_at)}</time>
                 </span>
               )}
-              <div className={`msg ${mine ? "me" : "them"}`}>{m.text}</div>
+              <div className={`msg ${mine ? "me" : "them"}`}>
+                {m.text}
+                {!mine && <TranslateButton text={m.text} />}
+              </div>
               {!mine && (
                 <span className="meta">
                   <time>{clock(m.created_at)}</time>
