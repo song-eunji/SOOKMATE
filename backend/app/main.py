@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -14,13 +15,14 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from . import ai, matching, views
+from . import ai, auth, matching, views
 from .constants import BIO_MAX_LEN, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
 from .db import Base, SessionLocal, engine, ensure_columns, get_db
 from .models import ChatRead, Match, Message, Note, Report, User
 from .seed import seed_demo
 
 DEV_MODE = os.getenv("DEV_MODE", "1") == "1"
+log = logging.getLogger("sookmate")
 
 
 @asynccontextmanager
@@ -45,12 +47,30 @@ app.add_middleware(
 
 
 # --------------------------------------------------------------- 공통 의존성
-def me_dep(x_user_id: int | None = Header(default=None), db: Session = Depends(get_db)) -> User:
-    uid = x_user_id or int(os.getenv("DEFAULT_USER_ID", "1"))
-    user = db.get(User, uid)
-    if not user:
+def _bearer(authorization: str | None) -> str | None:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip() or None
+    return None
+
+
+def me_dep(
+    x_user_id: int | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    """로그인한 사용자. 토큰이 있으면 토큰만 믿고, 개발 모드에서만 X-User-Id 헤더로 사용자를 고를 수 있다."""
+    token = _bearer(authorization)
+    if token:
+        user = auth.user_from_token(db, token)
+        if user:
+            return user
+        raise HTTPException(401, "로그인이 필요해요.")
+    if DEV_MODE:
+        user = db.get(User, x_user_id or int(os.getenv("DEFAULT_USER_ID", "1")))
+        if user:
+            return user
         raise HTTPException(401, "알 수 없는 사용자예요.")
-    return user
+    raise HTTPException(401, "로그인이 필요해요.")
 
 
 def run(fn, *args):
@@ -129,6 +149,14 @@ class ProfileIn(BaseModel):
 class BasicIn(BaseModel):
     name: str = Field(max_length=NAME_MAX_LEN * 3)  # 공백 정리 뒤 길이는 아래에서 확인
     bio: str = Field(default="", max_length=BIO_MAX_LEN * 3)
+    kind: str | None = None  # 처음 한 번만: domestic(국내 학생) | international(유학생)
+
+    @field_validator("kind")
+    @classmethod
+    def _k(cls, v):
+        if v is not None and v not in ("domestic", "international"):
+            raise ValueError("국내 학생 또는 유학생 중에서 골라 주세요")
+        return v
 
     @field_validator("name")
     @classmethod
@@ -196,6 +224,7 @@ def options():
         "languages": LANGUAGES,
         "topics": TOPICS,
         "ui_langs": UI_LANGS,
+        "login_domain": auth.LOGIN_DOMAIN,
         "name_max_len": NAME_MAX_LEN,
         "bio_max_len": BIO_MAX_LEN,
         "weights": WEIGHTS,
@@ -211,6 +240,65 @@ def list_users(db: Session = Depends(get_db)):
     return [{"id": u.id, "name": u.name, "kind": u.kind} for u in db.scalars(select(User).order_by(User.id))]
 
 
+# ------------------------------------------------------------------ 학교 메일 로그인
+class RequestCodeIn(BaseModel):
+    email: str = Field(max_length=300)
+
+
+class VerifyIn(BaseModel):
+    email: str = Field(max_length=300)
+    code: str = Field(max_length=20)
+    lang: str | None = None  # 새 계정이면 화면 언어로 저장한다
+
+
+def _auth_error(e: auth.AuthError) -> HTTPException:
+    return HTTPException(e.code, e.message)
+
+
+@app.post("/api/auth/request-code")
+def request_code(body: RequestCodeIn, db: Session = Depends(get_db)):
+    try:
+        email = auth.normalize_email(body.email)
+        code = auth.issue_code(db, email)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    try:
+        auth.send_code_mail(email, code)
+    except auth.MailNotConfigured:
+        if not DEV_MODE:
+            raise HTTPException(503, "메일 발송이 설정되지 않았어요.")
+        log.info("개발 모드: %s 의 인증 코드는 %s", email, code)
+    except Exception:
+        log.exception("인증 메일을 보내지 못했어요")
+        raise HTTPException(503, "메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.")
+    return {"sent": True, **({"dev_code": code} if DEV_MODE else {})}
+
+
+@app.post("/api/auth/verify")
+def verify_code(body: VerifyIn, db: Session = Depends(get_db)):
+    try:
+        email = auth.normalize_email(body.email)
+        auth.check_code(db, email, body.code)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    user = db.scalars(select(User).where(func.lower(User.email) == email)).first()
+    is_new = user is None
+    if is_new:
+        lang = body.lang if body.lang in [c for c, _ in UI_LANGS] else "ko"
+        user = User(name="", email=email, kind="", ui_lang=lang, onboarded=False, is_synthetic=False)
+        db.add(user)
+        db.commit()
+    return {"token": auth.create_token(db, user.id), "is_new": is_new}
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+    token = _bearer(authorization)
+    if token:
+        auth.revoke_token(db, token)
+    return {"ok": True}
+
+
 @app.get("/api/me")
 def get_me(me: User = Depends(me_dep), db: Session = Depends(get_db)):
     return views.user_me(db, me)
@@ -221,6 +309,10 @@ def put_basic(body: BasicIn, me: User = Depends(me_dep), db: Session = Depends(g
     taken = db.scalars(select(User).where(User.id != me.id)).all()
     if any(u.name.casefold() == body.name.casefold() for u in taken):
         raise HTTPException(409, "이미 쓰고 있는 닉네임이에요.")
+    if not me.kind:  # 새로 가입한 사람은 국내 학생인지 유학생인지 한 번 정한다 (이후에는 바꿀 수 없다)
+        if not body.kind:
+            raise HTTPException(422, "국내 학생인지 유학생인지 골라 주세요.")
+        me.kind = body.kind
     me.name, me.bio, me.onboarded = body.name, body.bio, True
     db.commit()
     return views.user_me(db, me)
@@ -383,10 +475,15 @@ async def post_message(match_id: int, body: MessageIn, me: User = Depends(me_dep
 
 
 @app.websocket("/ws/matches/{match_id}")
-async def ws_chat(ws: WebSocket, match_id: int, user_id: int):
+async def ws_chat(ws: WebSocket, match_id: int, token: str | None = None, user_id: int | None = None):
     with SessionLocal() as db:
+        if token:
+            who = auth.user_from_token(db, token)
+            user_id = who.id if who else None
+        elif not DEV_MODE:
+            user_id = None  # 개발 모드가 아니면 user_id 만으로는 들어올 수 없다
         m = db.get(Match, match_id)
-        ok = bool(m) and m.status == "confirmed" and user_id in (m.domestic_id, m.international_id)
+        ok = user_id is not None and bool(m) and m.status == "confirmed" and user_id in (m.domestic_id, m.international_id)
     if not ok:
         await ws.close(code=4403)
         return
