@@ -251,3 +251,22 @@ h2.plain { margin-bottom: 10px; }
 .langpick { display: flex; flex-wrap: wrap; gap: 6px; }
 .langpick .chip { padding: 5px 13px; font-size: 13px; }
 nav button { white-space: nowrap; }
+
+.activity-results { display: grid; gap: 16px; margin-top: 16px; }
+.activity-context { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px; display: grid; gap: 10px; }
+.activity-signal { border-left: 3px solid var(--accent); padding-left: 12px; }
+.activity-signal small { color: var(--muted); }
+.activity-signal blockquote { margin: 6px 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.activity-card { display: grid; gap: 12px; overflow-wrap: anywhere; }
+.activity-card ol { margin: 0; padding-left: 22px; }
+.activity-card li + li { margin-top: 8px; }
+.activity-card h4 { margin: 0 0 8px; }
+.activity-results details { border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.activity-results summary { cursor: pointer; font-size: 13px; }
+.activity-results details p { margin: 8px 0; font-size: 13px; white-space: pre-wrap; }
+.activity-results textarea { width: 100%; resize: vertical; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.activity-results textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.activity-ratings { border: 1px solid var(--line); border-radius: 12px; margin: 0; padding: 12px; display: grid; gap: 10px; min-width: 0; }
+.activity-ratings legend { color: var(--muted); font-size: 12px; }
+
+.google-search-suggestions { width: 100%; min-height: 150px; border: 0; background: var(--surface); border-radius: 12px; }
