@@ -18,6 +18,8 @@ import math
 import os
 import re
 import threading
+import time
+from contextvars import ContextVar
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
@@ -155,46 +157,136 @@ def retrieve(query: str, k: int = 3, prefs: list[str] | None = None, docs: list[
 
 
 # ------------------------------------------------------------------------ LLM
-_llm_cache: dict[tuple[str, str, str], dict] = {}
-# 번역처럼 짧고 자주 부르는 일은 빠르고 저렴한 모델로
-FAST_MODEL = os.getenv("ANTHROPIC_FAST_MODEL", "claude-haiku-5-5")
+_llm_cache: dict[tuple, dict] = {}
 _LLM_CACHE_MAX = 2000
+# 번역처럼 짧고 자주 부르는 일은 빠르고 저렴한 모델로. 공급자마다 따로 고른다(Anthropic: 아래, Gemini: GEMINI_FAST_MODEL).
+FAST_MODEL = os.getenv("ANTHROPIC_FAST_MODEL", "claude-haiku-5-5")
 
 
-def llm_json(system: str, user: str, model: str | None = None, max_tokens: int = 700) -> dict | None:
-    """ANTHROPIC_API_KEY 가 있을 때만 호출. 실패하거나 JSON이 아니면 None.
+def llm_config(fast: bool = False) -> dict[str, str]:
+    """쓸 LLM 공급자와 모델. LLM_PROVIDER=auto 이면 GEMINI_API_KEY 가 있을 때 Gemini, 없으면 Anthropic."""
+    provider = os.getenv("LLM_PROVIDER", "auto").strip().lower()
+    if provider == "auto":
+        provider = "gemini" if os.getenv("GEMINI_API_KEY") else "anthropic"
+    if provider == "gemini":
+        base = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        model = (os.getenv("GEMINI_FAST_MODEL") or base) if fast else base
+    else:
+        model = FAST_MODEL if fast else os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    return {"provider": provider, "model": model}
 
+
+_llm_status: ContextVar[dict | None] = ContextVar("llm_status", default=None)
+
+
+def llm_status() -> dict:
+    return dict(_llm_status.get() or {"status": "unknown"})
+
+
+def _set_llm_status(status: str, **details) -> None:
+    _llm_status.set({"status": status, **details})
+
+
+def quota_status(payload: dict) -> dict:
+    """Expose only quota category/delay; never provider messages or project identifiers."""
+    result = {"status": "rate_limited"}
+    details = payload.get("error", {}).get("details", [])
+    for detail in details:
+        if not isinstance(detail, dict):
+            continue
+        for violation in detail.get("violations", []):
+            quota_id = violation.get("quotaId", "")
+            if "PerDay" in quota_id:
+                result["status"] = "daily_quota_exhausted"
+            elif "PerMinute" in quota_id and result["status"] != "daily_quota_exhausted":
+                result["status"] = "minute_quota_exhausted"
+        delay = detail.get("retryDelay")
+        if isinstance(delay, str) and re.fullmatch(r"\d+(?:\.\d+)?s", delay):
+            result["retry_after_seconds"] = int(float(delay[:-1]))
+    return result
+
+
+def llm_json(system: str, user: str, fast: bool = False, max_tokens: int | None = None) -> dict | None:
+    """Gemini 또는 Anthropic 으로 JSON 답을 받는다. 키가 없거나 실패하거나 JSON 이 아니면 None.
+
+    fast=True 이면 번역처럼 짧고 자주 부르는 일에 맞는 빠른 모델을 쓴다.
     입력이 같으면 저장해 둔 결과를 다시 쓴다(화면을 새로 열 때마다 호출·비용이 생기지 않게).
     실패는 저장하지 않아서 다음 요청 때 다시 시도한다.
     """
-    key = os.getenv("ANTHROPIC_API_KEY")
-    if not key:
+    config = llm_config(fast)
+    provider, model = config["provider"], config["model"]
+    _set_llm_status("pending", **config)
+    if provider not in ("gemini", "anthropic"):
+        _set_llm_status("invalid_provider", **config)
         return None
-    model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
-    ck = (model, system, user)
+    key = os.getenv("GEMINI_API_KEY" if provider == "gemini" else "ANTHROPIC_API_KEY")
+    if not key:
+        _set_llm_status("not_configured", **config)
+        return None
+    ck = (provider, model, system, user, max_tokens)
     if ck in _llm_cache:
+        _set_llm_status("ok", **config)
         return copy.deepcopy(_llm_cache[ck])
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=key, timeout=15)
-        r = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        text = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
-        m = re.search(r"\{.*\}", text, re.S)
-        data = json.loads(m.group(0)) if m else None
-        if isinstance(data, dict):
-            if len(_llm_cache) >= _LLM_CACHE_MAX:
-                _llm_cache.clear()
-            _llm_cache[ck] = copy.deepcopy(data)
-            return data
-        return None
-    except Exception as e:  # 네트워크, 키, 파싱 오류 모두 fallback 으로
-        log.warning("LLM 호출 실패, 기본 카드로 대체: %s", e)
+        if provider == "gemini":
+            import httpx
+            # Restrict the interpolated model to an identifier, never a URL/path.
+            if not re.fullmatch(r"[a-zA-Z0-9._-]+", model):
+                _set_llm_status("invalid_model", **config)
+                return None
+            timeout = min(60, max(5, float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))))
+            with httpx.Client(timeout=httpx.Timeout(timeout, connect=5)) as client:
+                for attempt in range(2):
+                    response = client.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                        headers={"x-goog-api-key": key},
+                        json={"systemInstruction": {"parts": [{"text": system}]},
+                              "contents": [{"role": "user", "parts": [{"text": user}]}],
+                              "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": max_tokens or 4096}},
+                    )
+                    if response.status_code in (500, 502, 503, 504) and attempt == 0:
+                        time.sleep(0.5)
+                        continue
+                    break
+                if response.is_error:
+                    status = {400: "invalid_request", 401: "authentication", 403: "permission_denied",
+                              404: "model_unavailable", 429: "rate_limited"}.get(response.status_code, "service_unavailable")
+                    quota = quota_status(response.json()) if response.status_code == 429 else {"status": status}
+                    _set_llm_status(**quota, http_status=response.status_code, attempts=attempt + 1, **config)
+                    return None
+                candidates = response.json().get("candidates", [])
+                if not candidates or candidates[0].get("finishReason") != "STOP":
+                    _set_llm_status("incomplete_response", **config)
+                    return None
+                parts = candidates[0].get("content", {}).get("parts", [])
+                text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
+        else:
+            import anthropic
+            with anthropic.Anthropic(api_key=key, timeout=15, max_retries=0) as client:
+                response = client.messages.create(
+                    model=model, max_tokens=max_tokens or 1600, system=system,
+                    messages=[{"role": "user", "content": user}],
+                )
+                if response.stop_reason != "end_turn":
+                    _set_llm_status("incomplete_response", **config)
+                    return None
+                text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
+        # JSON mode is a hint; callers still validate their required schema.
+        match = re.search(r"\{.*\}", text, re.S)
+        data = json.loads(match.group(0)) if match else None
+        _set_llm_status("ok" if isinstance(data, dict) else "invalid_response", **config)
+        if not isinstance(data, dict):
+            return None
+        if len(_llm_cache) >= _LLM_CACHE_MAX:
+            _llm_cache.clear()
+        _llm_cache[ck] = copy.deepcopy(data)
+        return data
+    except Exception as error:
+        # Never log provider response bodies, prompts, keys or credential-bearing URLs.
+        import httpx
+        status = "timeout" if isinstance(error, httpx.TimeoutException) else "connection_error" if isinstance(error, httpx.RequestError) else "invalid_response"
+        _set_llm_status(status, **config)
+        log.warning("%s LLM 호출 실패 (%s), 기본 카드로 대체", provider, type(error).__name__)
         return None
 
 
@@ -399,8 +491,7 @@ def translate(text: str, target: str) -> str | None:
         "뜻을 더하거나 빼지 말고, 이모지·말투·고유명사는 살려. 설명 없이 JSON으로만 답해. "
         '형식: {"text":"번역문"}',
         json.dumps({"번역할 언어": LANG_NAMES[target], "문장": text}, ensure_ascii=False),
-        model=FAST_MODEL,
-        max_tokens=1000,
+        fast=True,
     )
     out = data.get("text") if data else None
     if isinstance(out, str) and 0 < len(out.strip()) <= max(300, len(text) * 4):

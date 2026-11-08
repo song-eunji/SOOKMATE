@@ -91,3 +91,11 @@ export function wsUrl(matchId: number): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${location.host}/ws/matches/${matchId}?user_id=${getUserId()}`;
 }
+
+export const compareActivities = (id: number) => req<import("./types").ActivityComparison>(
+  `/matches/${id}/next-activity?compare=true`, { method: "POST" },
+);
+
+export const generateActivity = (id: number) => req<import("./types").GeneratedActivity>(
+  `/matches/${id}/next-activity`, { method: "POST" },
+);

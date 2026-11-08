@@ -108,7 +108,7 @@ def test_translate_to_reader_language(client, monkeypatch):
     r = client.post("/api/translate", json={"text": "안녕하세요! 만나서 반가워요 😊"}, headers=h(1)).json()
     assert r == {"text": "你好！很高兴认识你 😊", "translated": True, "lang": "zh"}
     assert fake.calls[0][1] == {"번역할 언어": "简体中文", "문장": "안녕하세요! 만나서 반가워요 😊"}
-    assert fake.kwargs[0]["model"] == ai.FAST_MODEL  # 번역은 빠른 모델로
+    assert fake.kwargs[0]["fast"] is True  # 번역은 빠른 모델로 (공급자별 모델은 llm_config 가 고른다)
 
 
 def test_translate_rejects_bad_llm_output(client, monkeypatch):
@@ -133,11 +133,17 @@ def test_llm_json_caches_only_success(monkeypatch):
             if calls["fail"]:
                 raise RuntimeError("network")
             block = types.SimpleNamespace(type="text", text='{"text": "ok"}')
-            return types.SimpleNamespace(content=[block])
+            return types.SimpleNamespace(content=[block], stop_reason="end_turn")
 
     class Anthropic:
         def __init__(self, **kw):
             self.messages = Messages()
+
+        def __enter__(self):  # 호출부가 with 문으로 쓴다
+            return self
+
+        def __exit__(self, *exc):
+            return False
 
     monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=Anthropic))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")

@@ -143,3 +143,35 @@ export interface NextActivity {
   desc: string;
   basis: "shared_notes" | "common_interest" | "default";
 }
+
+export interface ActivitySource { id: string; title: string; url: string; text: string; text_kind?: string }
+export interface GeneratedActivity extends NextActivity {
+  analysis?: NoteAnalysis;
+  reason: string;
+  steps: string[];
+  sources: ActivitySource[];
+  source_ids: string[];
+  generation_mode: "llm" | "fallback";
+  llm?: { provider: string; model: string };
+  llm_status?: { status: string; http_status?: number };
+  generation_ms: number;
+  search_status?: string;
+  search_provider?: string;
+  grounding?: { queries: string[]; segments: { text: string; source_ids: string[] }[]; search_entry_html: string } | null;
+  query?: string;
+  retrieved_sources?: ActivitySource[];
+}
+export interface ActivityComparison {
+  retrieval: GeneratedActivity;
+  baseline: GeneratedActivity;
+  comparable: boolean;
+  rubric: string[];
+}
+
+export interface NoteAnalysis {
+  mode: "llm" | "fallback";
+  entries: { id: string; participant: string; field: string; text: string }[];
+  signals: { kind: string; text: string; note_id: string; quote: string }[];
+  keywords: string[];
+  query: string;
+}

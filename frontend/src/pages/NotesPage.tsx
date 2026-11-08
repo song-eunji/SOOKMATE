@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { api } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { api, compareActivities, generateActivity } from "../api";
+import ActivityResults from "./ActivityResults";
 import { Lock, MatchPicker, TranslateButton } from "../components";
 import { useI18n } from "../i18n";
-import type { MatchView, NextActivity, NoteData, NotesResponse } from "../types";
+import type { ActivityComparison, GeneratedActivity, MatchView, NextActivity, NoteData, NotesResponse } from "../types";
 
 interface Props {
   active: MatchView | null;
@@ -25,12 +26,23 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
   const [note, setNote] = useState<NoteData>(EMPTY);
   const [theirs, setTheirs] = useState<NotesResponse["partner_shared"]>(null);
   const [next, setNext] = useState<NextActivity | null>(null);
+  const [comparison, setComparison] = useState<ActivityComparison | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<GeneratedActivity | null>(null);
+  const requestVersion = useRef(0);
   const [saved, setSaved] = useState(false);
   const matchId = active?.id ?? null;
 
   useEffect(() => {
     if (matchId === null) return;
     let alive = true;
+    requestVersion.current += 1;
+    setComparison(null);
+    setResult(null);
+    setBusy(false);
+    setError("");
+    setTheirs(null);
     setNote(EMPTY);
     setNext(null);
     setSaved(false);
@@ -42,12 +54,13 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
         if (r.mine) {
           setNote(r.mine);
           setSaved(true);
-          api.nextActivity(matchId).then((n) => alive && setNext(n));
+          api.nextActivity(matchId).then((n) => alive && setNext(n)).catch((e) => alive && flash((e as Error).message));
         }
       })
       .catch((e) => flash((e as Error).message));
     return () => {
       alive = false;
+      requestVersion.current += 1;
     };
   }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -56,6 +69,36 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
   }
   const name = active.partner.name;
   const empty = !note.expr.trim() && !note.fact.trim() && !note.next_text.trim();
+
+  const recommend = async (compare: boolean) => {
+    const version = ++requestVersion.current;
+    setBusy(true);
+    setError("");
+    setComparison(null);
+    setResult(null);
+    try {
+      if (compare) {
+        const response = await compareActivities(active.id);
+        if (version === requestVersion.current) { setComparison(response); setResult(response.retrieval); }
+      } else {
+        const response = await generateActivity(active.id);
+        if (version === requestVersion.current) setResult(response);
+      }
+    } catch (e) {
+      if (version === requestVersion.current) setError((e as Error).message);
+    } finally {
+      if (version === requestVersion.current) setBusy(false);
+    }
+  };
+
+  const invalidate = () => {
+    requestVersion.current += 1;
+    setComparison(null);
+    setResult(null);
+    setError("");
+    setBusy(false);
+    setSaved(false);
+  };
 
   const save = async () => {
     try {
@@ -71,6 +114,7 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
   const remove = async () => {
     try {
       await api.deleteNote(active.id);
+      invalidate();
       setNote(EMPTY);
       setNext(null);
       setSaved(false);
@@ -103,7 +147,7 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
                 maxLength={200}
                 placeholder={t(f.ph)}
                 onChange={(e) => {
-                  setSaved(false);
+                  invalidate();
                   setNote((n) => ({ ...n, [f.key]: e.target.value }));
                 }}
               />
@@ -117,7 +161,7 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
                 aria-checked={note[f.share]}
                 aria-label={t("{label} 공유", { label: t(f.label) })}
                 onClick={() => {
-                  setSaved(false);
+                  invalidate();
                   setNote((n) => ({ ...n, [f.share]: !n[f.share] }));
                 }}
               />
@@ -149,20 +193,30 @@ export default function NotesPage({ active, confirmed, onPick, goRec, flash }: P
         <div className="banner ok">{t("노트를 저장했어요. 삭제는 언제든 할 수 있어요.")}</div>
       )}
 
-      {next && (
+      {saved && (
+        <section className="sec" aria-busy={busy}>
+          <h2>노트에서 다음 만남으로</h2>
+          <p className="lead">두 사람이 공유한 항목으로 활동 자료를 찾고, 검색 없는 추천과 비교해요.</p>
+          <div className="row">
+            <button className="btn" disabled={busy} onClick={() => recommend(false)}>
+              {busy ? "노트를 읽고 활동을 찾는 중…" : "다음 활동 추천받기"}
+            </button>
+            <button className="btn ghost" disabled={busy} onClick={() => recommend(true)}>검색 유무 비교 실험</button>
+          </div>
+          {busy && <p role="status">노트 분석 → 자료 검색 → 활동 생성 순서로 진행해요. 일시 장애 재시도를 포함하면 최대 3분 정도 걸릴 수 있어요.</p>}
+          {error && <p role="alert">{error} 다시 시도해 주세요.</p>}
+          {result && <ActivityResults key={requestVersion.current} matchId={active.id} result={result} comparison={comparison} />}
+
+        </section>
+      )}
+
+      {next && !result && !busy && (
         <section className="sec">
           <h2>{t("다음 활동 제안")}</h2>
           <div className="act">
             <h3>{next.title}</h3>
             <p>{next.desc}</p>
-            <div className="row">
-              <button className="btn" onClick={() => flash(t("다음 활동 제안은 아직 연결되지 않았어요"))}>
-                {t("제안 보내기")}
-              </button>
-              <button className="btn ghost" onClick={() => flash(t("정기 만남 일정 정하기는 아직 연결되지 않았어요"))}>
-                {t("정기 만남 정하기")}
-              </button>
-            </div>
+
           </div>
         </section>
       )}

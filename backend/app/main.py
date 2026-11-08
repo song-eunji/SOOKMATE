@@ -486,17 +486,37 @@ def delete_note(match_id: int, me: User = Depends(me_dep), db: Session = Depends
     return {"ok": True}
 
 
-@app.get("/api/matches/{match_id}/next-activity")
-def next_activity(match_id: int, me: User = Depends(me_dep), db: Session = Depends(get_db)):
-    """두 사람 노트 중 '공유가 켜진 다음 활동'만 근거로 쓴다."""
+def _shared_activity_context(db, match_id, me):
     m = my_match(db, match_id, me, confirmed=True)
     partner = views.partner_of(db, m, me.id)
-    shared: list[str] = []
-    for author in (me, partner):
+    shared = []
+    entries = []
+    for author in sorted((me, partner), key=lambda user: user.id):
         n = _note(db, match_id, author.id)
-        if n and n.share_next and n.next_text:
-            shared.append(n.next_text)
-    return ai.make_next_activity(matching.explain(me, partner), shared)
+        if n:
+            for field, flag in (("next_text", "share_next"), ("expr", "share_expr"), ("fact", "share_fact")):
+                value = getattr(n, field)
+                if getattr(n, flag) and value and value.strip():
+                    shared.append(value.strip())
+                    entries.append({"id": f"N{len(entries) + 1}", "participant": "A" if author.id == min(me.id, partner.id) else "B",
+                                    "field": field, "text": value.strip()})
+    ex = matching.explain(me, partner)
+    ex["shared_entries"] = entries
+    return ex, shared
+
+
+@app.get("/api/matches/{match_id}/next-activity")
+def next_activity(match_id: int, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    # Reading a note stays cheap; external generation is an explicit POST action.
+    ex, shared = _shared_activity_context(db, match_id, me)
+    return ai.make_next_activity(ex, shared)
+
+
+@app.post("/api/matches/{match_id}/next-activity")
+def generate_next_activity(match_id: int, compare: bool = False, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .next_activity import recommend
+    ex, shared = _shared_activity_context(db, match_id, me)
+    return recommend(ex, shared, compare=compare)
 
 
 # ------------------------------------------------------------------ 신고 · 차단
