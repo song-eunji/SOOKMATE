@@ -107,3 +107,48 @@ def test_daily_quota_is_distinct_from_minute_limit():
     ]}})
     assert result == {"status": "daily_quota_exhausted", "retry_after_seconds": 66545}
     assert ai.quota_status({"error": {"details": [{"violations": [{"quotaId": "RequestsPerMinute"}]}]}})["status"] == "minute_quota_exhausted"
+
+
+# ------------------------------------------------- 번역도 같은 Gemini 키로 동작한다
+def test_translate_runs_on_gemini_with_the_fast_model(client, monkeypatch):
+    calls = fake_gemini(monkeypatch, {"candidates": [{"finishReason": "STOP", "content": {"parts": [
+        {"text": json.dumps({"text": "こんにちは"})},
+    ]}}]})
+    monkeypatch.setenv("GEMINI_MODEL", "main-model")
+    monkeypatch.setenv("GEMINI_FAST_MODEL", "fast-model")
+    me = {"X-User-Id": "1"}
+    assert client.put("/api/me/language", json={"lang": "ja"}, headers=me).status_code == 200
+
+    r = client.post("/api/translate", json={"text": "안녕하세요"}, headers=me).json()
+    assert r == {"text": "こんにちは", "translated": True, "lang": "ja"}
+    url, request = calls[0]
+    assert "models/fast-model:" in url  # 번역은 빠른 모델
+    assert "日本語" in request["json"]["contents"][0]["parts"][0]["text"] and "안녕하세요" in request["json"]["contents"][0]["parts"][0]["text"]
+    assert "test-secret" not in url
+
+
+def test_translate_uses_the_main_model_when_no_fast_model_is_set(client, monkeypatch):
+    calls = fake_gemini(monkeypatch, {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": json.dumps({"text": "Hello"})}]}}]})
+    monkeypatch.setenv("GEMINI_MODEL", "main-model")
+    monkeypatch.delenv("GEMINI_FAST_MODEL", raising=False)
+    me = {"X-User-Id": "1"}
+    client.put("/api/me/language", json={"lang": "en"}, headers=me)
+    assert client.post("/api/translate", json={"text": "안녕"}, headers=me).json()["translated"] is True
+    assert "models/main-model:" in calls[0][0]
+
+
+def test_translate_without_a_key_returns_the_original(client, monkeypatch):
+    for k in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("LLM_PROVIDER", "auto")
+    me = {"X-User-Id": "1"}
+    client.put("/api/me/language", json={"lang": "en"}, headers=me)
+    r = client.post("/api/translate", json={"text": "안녕하세요"}, headers=me).json()
+    assert r == {"text": "안녕하세요", "translated": False, "lang": "en"}
+
+
+def test_translate_requires_login_outside_dev_mode(client, monkeypatch):
+    from app import main as app_main
+
+    monkeypatch.setattr(app_main, "DEV_MODE", False)
+    assert client.post("/api/translate", json={"text": "안녕"}).status_code == 401
