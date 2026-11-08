@@ -15,6 +15,16 @@ export interface Options {
   bio_max_len: number;
   weights: Record<string, number>;
   dev_mode: boolean;
+  dev_login: boolean; // 개발자 입장 버튼(가짜 프로필 계정으로 바로 입장)을 보여줄지
+}
+
+export interface DevUser {
+  id: number;
+  name: string;
+  kind: string;
+  dept: string;
+  nationality: string | null;
+  bio: string;
 }
 
 export interface UserLite {

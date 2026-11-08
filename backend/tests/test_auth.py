@@ -18,14 +18,25 @@ def _no_cooldown(monkeypatch):
 
 
 def request_code(client, email=SCHOOL):
-    return client.post("/api/auth/request-code", json={"email": email})
+    return client.post("/api/auth/request-code", json={"email": email, "purpose": "signup"})
+
+
+PW = "sookmate-pw1"
+
+
+def signup(client, email=SCHOOL, lang="ko", password=PW):
+    code = req(client, email, "signup").json()["dev_code"]
+    r = client.post("/api/auth/signup", json={"email": email, "code": code, "password": password, "lang": lang})
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
 def login(client, email=SCHOOL, lang="ko"):
-    code = request_code(client, email).json()["dev_code"]
-    r = client.post("/api/auth/verify", json={"email": email, "code": code, "lang": lang})
-    assert r.status_code == 200, r.text
-    return r.json()
+    """처음이면 회원가입, 이미 가입했으면 비밀번호로 로그인한다."""
+    r = client.post("/api/auth/login", json={"email": email, "password": PW})
+    if r.status_code == 200:
+        return r.json()
+    return signup(client, email, lang)
 
 
 def bearer(token):
@@ -78,27 +89,27 @@ def test_wrong_code_is_rejected_and_locks_after_too_many_tries(client):
     code = request_code(client).json()["dev_code"]
     wrong = "000000" if code != "000000" else "111111"
     for _ in range(auth.MAX_ATTEMPTS):
-        r = client.post("/api/auth/verify", json={"email": SCHOOL, "code": wrong})
+        r = client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": wrong})
         assert r.status_code == 400
     # 시도 횟수를 넘으면 맞는 코드도 쓸 수 없고, 새 코드를 받아야 한다
-    r = client.post("/api/auth/verify", json={"email": SCHOOL, "code": code})
+    r = client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": code})
     assert r.status_code == 429
     fresh = request_code(client).json()["dev_code"]
-    assert client.post("/api/auth/verify", json={"email": SCHOOL, "code": fresh}).status_code == 200
+    assert client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": fresh}).status_code == 200
 
 
 def test_code_is_single_use(client):
     code = request_code(client).json()["dev_code"]
-    assert client.post("/api/auth/verify", json={"email": SCHOOL, "code": code}).status_code == 200
-    assert client.post("/api/auth/verify", json={"email": SCHOOL, "code": code}).status_code == 400
+    assert client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": code}).status_code == 200
+    assert client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": code}).status_code == 400
 
 
 def test_old_code_stops_working_when_a_new_one_is_issued(client):
     first = request_code(client).json()["dev_code"]
     second = request_code(client).json()["dev_code"]
     if first != second:  # 우연히 같으면 이 검사는 의미가 없다
-        assert client.post("/api/auth/verify", json={"email": SCHOOL, "code": first}).status_code == 400
-    assert client.post("/api/auth/verify", json={"email": SCHOOL, "code": second}).status_code == 200
+        assert client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": first}).status_code == 400
+    assert client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": second}).status_code == 200
 
 
 def test_expired_code_is_rejected(client):
@@ -107,19 +118,19 @@ def test_expired_code_is_rejected(client):
         row = db.query(LoginCode).order_by(LoginCode.id.desc()).first()
         row.expires_at = row.created_at  # 이미 만료
         db.commit()
-    r = client.post("/api/auth/verify", json={"email": SCHOOL, "code": code})
+    r = client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": code})
     assert r.status_code == 400 and "만료" in r.json()["detail"]
 
 
 def test_code_for_another_mail_does_not_work(client):
     code = request_code(client, "a@sookmyung.ac.kr").json()["dev_code"]
-    assert client.post("/api/auth/verify", json={"email": "b@sookmyung.ac.kr", "code": code}).status_code == 400
+    assert client.post("/api/auth/signup", json={"password": PW, "email": "b@sookmyung.ac.kr", "code": code}).status_code == 400
 
 
 def test_malformed_code_is_rejected(client):
     request_code(client)
     for bad in ["", "abc", "12345", "1234567", "12 345"]:
-        assert client.post("/api/auth/verify", json={"email": SCHOOL, "code": bad}).status_code == 400
+        assert client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": bad}).status_code == 400
 
 
 # ------------------------------------------------------------------ 요청 횟수 제한
@@ -188,7 +199,7 @@ def test_mail_is_not_returned_dev_code_outside_dev_mode(client, monkeypatch):
     assert r.status_code == 200 and "dev_code" not in r.json()
     code = re.search(r"\b(\d{6})\b", sent["body"]).group(1)
     assert sent["to"] == SCHOOL
-    assert client.post("/api/auth/verify", json={"email": SCHOOL, "code": code}).status_code == 200
+    assert client.post("/api/auth/signup", json={"password": PW, "email": SCHOOL, "code": code}).status_code == 200
 
 
 def test_mail_not_configured_outside_dev_mode_is_503(client, monkeypatch):
@@ -245,3 +256,38 @@ def test_websocket_accepts_token_and_rejects_bad_token(client):
                 pass
         finally:
             mod.DEV_MODE = old
+
+
+# ------------------------------------------------- 가입(코드 한 번 + 비밀번호)과 로그인
+def req(client, email, purpose):
+    return client.post("/api/auth/request-code", json={"email": email, "purpose": purpose})
+
+
+def test_signup_then_login_with_password_only(client):
+    mail = "flow@sookmyung.ac.kr"
+    out = signup(client, mail, lang="en")
+    assert out["is_new"] is True
+    # 같은 메일로 다시 가입하려고 하면 로그인하라고 안내한다
+    r = req(client, mail, "signup")
+    assert r.status_code == 409 and "로그인" in r.json()["detail"]
+    # 로그인은 코드 없이 메일과 비밀번호만으로 된다
+    again = client.post("/api/auth/login", json={"email": mail, "password": PW}).json()
+    assert again["is_new"] is False
+    me = client.get("/api/me", headers=bearer(again["token"])).json()
+    assert me["email"] == mail and me["ui_lang"] == "en"
+
+
+def test_login_no_longer_uses_codes(client):
+    assert req(client, "x@sookmyung.ac.kr", "login").status_code == 422
+
+
+def test_signup_is_still_limited_to_school_mail(client):
+    for purpose in ("signup", "reset"):
+        r = req(client, "someone@gmail.com", purpose)
+        assert r.status_code == 422 and "숙명여자대학교" in r.json()["detail"]
+    r = client.post("/api/auth/login", json={"email": "someone@gmail.com", "password": PW})
+    assert r.status_code == 422 and "숙명여자대학교" in r.json()["detail"]
+
+
+def test_purpose_must_be_known(client):
+    assert req(client, "ok@sookmyung.ac.kr", "visit").status_code == 422

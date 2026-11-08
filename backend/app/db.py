@@ -26,7 +26,8 @@ def get_db():
 def ensure_columns() -> None:
     """이미 만들어진 DB 파일에 새 컬럼이 없으면 붙인다. (create_all 은 기존 테이블에 컬럼을 추가하지 않음)"""
     cols = {c["name"] for c in inspect(engine).get_columns("users")}
-    add = {"ui_lang": "VARCHAR(4) DEFAULT 'ko'", "bio": "VARCHAR(80) DEFAULT ''", "onboarded": "BOOLEAN DEFAULT 0"}
+    add = {"ui_lang": "VARCHAR(4) DEFAULT 'ko'", "bio": "VARCHAR(80) DEFAULT ''", "onboarded": "BOOLEAN DEFAULT 0",
+           "password_hash": "VARCHAR(200)", "login_fails": "INTEGER DEFAULT 0", "locked_until": "DATETIME"}
     with engine.begin() as conn:
         for name, ddl in add.items():
             if name not in cols:

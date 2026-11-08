@@ -4,6 +4,7 @@ import type {
   Brief,
   ChatMessage,
   ChatRoom,
+  DevUser,
   MatchView,
   Me,
   NextActivity,
@@ -15,47 +16,54 @@ import type {
   UserLite,
 } from "./types";
 
-// 로그인하면 세션 토큰을 localStorage 에 두고 Authorization 헤더로 보낸다.
-// 서버가 개발 모드일 때만 '개발용 사용자'(X-User-Id 헤더)로도 들어올 수 있다.
-const store = {
-  get(key: string): string | null {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  set(key: string, value: string) {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      /* 저장이 막혀 있어도 동작에는 문제 없음 */
-    }
-  },
-  remove(key: string) {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      /* 무시 */
-    }
-  },
-};
+// 로그인하면 세션 토큰을 localStorage 에 두고 Authorization 헤더로 보낸다(브라우저를 닫아도 유지).
+// 서버가 개발 모드일 때만 '개발용 사용자'(X-User-Id 헤더)로도 들어올 수 있고, 이 값은 sessionStorage 에만 둔다.
+// 그래서 창이나 탭을 새로 열면 늘 로그인 화면부터 시작한다.
+function makeStore(kind: "localStorage" | "sessionStorage") {
+  const area = () => window[kind];
+  return {
+    get(key: string): string | null {
+      try {
+        return area().getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    set(key: string, value: string) {
+      try {
+        area().setItem(key, value);
+      } catch {
+        /* 저장이 막혀 있어도 동작에는 문제 없음 */
+      }
+    },
+    remove(key: string) {
+      try {
+        area().removeItem(key);
+      } catch {
+        /* 무시 */
+      }
+    },
+  };
+}
+const store = makeStore("localStorage");
+const tabStore = makeStore("sessionStorage");
 
 export const getToken = () => store.get("token");
 export const setToken = (t: string) => store.set("token", t);
 export const clearToken = () => store.remove("token");
 
-/** 개발용 사용자 번호. "개발용 사용자로 둘러보기"를 누른 적이 없으면 null.
- *  예전 버전이 남겨 둔 "userId" 값은 읽지 않는다(그 값 때문에 로그인 없이 수아로 들어가던 문제). */
+/** 개발용 사용자 번호. "개발용 사용자로 둘러보기"를 누른 탭에서만 유지된다(없으면 null).
+ *  예전 버전이 localStorage 에 남긴 "userId", "devUserId" 값은 읽지 않고 지운다. */
 const DEV_KEY = "devUserId";
 export function getUserId(): number | null {
-  const v = Number(store.get(DEV_KEY));
+  const v = Number(tabStore.get(DEV_KEY));
   return v > 0 ? v : null;
 }
-export const setUserId = (id: number) => store.set(DEV_KEY, String(id));
+export const setUserId = (id: number) => tabStore.set(DEV_KEY, String(id));
 export const clearUserId = () => {
-  store.remove(DEV_KEY);
-  store.remove("userId"); // 예전 버전이 남긴 값도 같이 지운다
+  tabStore.remove(DEV_KEY);
+  store.remove(DEV_KEY); // 예전 버전이 남긴 값도 같이 지운다
+  store.remove("userId");
 };
 
 /** 세션이 끝났을 때(401) 화면이 로그인으로 돌아가도록 알린다 */
@@ -85,7 +93,7 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       /* 본문이 JSON 이 아니면 statusText 사용 */
     }
-    if (res.status === 401 && path !== "/auth/verify") window.dispatchEvent(new Event(SESSION_ENDED));
+    if (res.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event(SESSION_ENDED));
     throw new Error(msg);
   }
   return res.json() as Promise<T>;
@@ -95,8 +103,14 @@ const post = <T>(path: string, body?: unknown) =>
   req<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
 export const api = {
-  requestCode: (email: string) => post<{ sent: boolean; dev_code?: string }>("/auth/request-code", { email }),
-  verifyCode: (email: string, code: string, lang: string) => post<{ token: string; is_new: boolean }>("/auth/verify", { email, code, lang }),
+  requestCode: (email: string, purpose: "signup" | "reset") => post<{ sent: boolean; dev_code?: string }>("/auth/request-code", { email, purpose }),
+  signup: (email: string, code: string, password: string, lang: string) =>
+    post<{ token: string; is_new: boolean }>("/auth/signup", { email, code, password, lang }),
+  login: (email: string, password: string) => post<{ token: string; is_new: boolean }>("/auth/login", { email, password }),
+  resetPassword: (email: string, code: string, password: string) =>
+    post<{ token: string; is_new: boolean }>("/auth/reset-password", { email, code, password }),
+  devUsers: () => req<DevUser[]>("/auth/dev-users"),
+  devLogin: (userId: number) => post<{ token: string; is_new: boolean }>("/auth/dev-login", { user_id: userId }),
   logout: () => post<{ ok: boolean }>("/auth/logout"),
   options: () => req<Options>("/options"),
   users: () => req<UserLite[]>("/users"),

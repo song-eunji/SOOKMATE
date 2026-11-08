@@ -28,6 +28,9 @@ class User(Base):
     prefs: Mapped[list] = mapped_column(JSON, default=list)  # 만나기 전 브리핑에 공개되는 선호
     weekly_cap: Mapped[int] = mapped_column(Integer, default=DEFAULT_WEEKLY_CAP)
     is_synthetic: Mapped[bool] = mapped_column(Boolean, default=False)
+    password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)  # scrypt$솔트$해시 (평문은 저장하지 않는다)
+    login_fails: Mapped[int] = mapped_column(Integer, default=0)  # 연속으로 비밀번호를 틀린 횟수
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 이 시각까지 로그인 잠금
 
 
 class Block(Base):

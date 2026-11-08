@@ -16,6 +16,9 @@ from .models import Block, Match, User
 from .util import utcnow, week_of
 
 ACTIVE = ("proposed", "confirmed")  # 이번 주 상한에 포함되는 상태
+# 가짜(시드) 사용자끼리도 서로 이어 줄지. 개발 시연에서는 켜 두고(main.py 가 DEV_MODE 로 정한다),
+# 실제 로그인으로 쓸 때는 꺼서 가짜 프로필의 자리가 실제 사용자 몫으로 남게 한다.
+FAKE_PAIRS = True
 
 
 class MatchError(Exception):
@@ -159,6 +162,8 @@ def assign(db: Session) -> int:
     for d in doms:
         for i in ints:
             if frozenset((d.id, i.id)) in existing or not hard_filter(d, i, blocked):
+                continue
+            if not FAKE_PAIRS and d.is_synthetic and i.is_synthetic:
                 continue
             edges.append((d, i, score_pair(d, i)))
     if not edges:
