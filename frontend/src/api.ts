@@ -84,7 +84,7 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       /* 본문이 JSON 이 아니면 statusText 사용 */
     }
-    if (res.status === 401 && path !== "/auth/verify") window.dispatchEvent(new Event(SESSION_ENDED));
+    if (res.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event(SESSION_ENDED));
     throw new Error(msg);
   }
   return res.json() as Promise<T>;
@@ -94,8 +94,12 @@ const post = <T>(path: string, body?: unknown) =>
   req<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
 export const api = {
-  requestCode: (email: string) => post<{ sent: boolean; dev_code?: string }>("/auth/request-code", { email }),
-  verifyCode: (email: string, code: string, lang: string) => post<{ token: string; is_new: boolean }>("/auth/verify", { email, code, lang }),
+  requestCode: (email: string, purpose: "signup" | "reset") => post<{ sent: boolean; dev_code?: string }>("/auth/request-code", { email, purpose }),
+  signup: (email: string, code: string, password: string, lang: string) =>
+    post<{ token: string; is_new: boolean }>("/auth/signup", { email, code, password, lang }),
+  login: (email: string, password: string) => post<{ token: string; is_new: boolean }>("/auth/login", { email, password }),
+  resetPassword: (email: string, code: string, password: string) =>
+    post<{ token: string; is_new: boolean }>("/auth/reset-password", { email, code, password }),
   logout: () => post<{ ok: boolean }>("/auth/logout"),
   options: () => req<Options>("/options"),
   users: () => req<UserLite[]>("/users"),

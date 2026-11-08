@@ -237,24 +237,68 @@ def list_users(db: Session = Depends(get_db)):
 
 
 # ------------------------------------------------------------------ 학교 메일 로그인
+def _purpose(v):
+    if v not in (None, "signup", "reset"):
+        raise ValueError("purpose 는 signup 또는 reset 이어야 해요")
+    return v
+
+
 class RequestCodeIn(BaseModel):
     email: str = Field(max_length=300)
+    # signup: 아직 가입하지 않은 메일만, reset: 이미 가입한 메일만(비밀번호 찾기·처음 설정), 없으면 둘 다 허용(시험용)
+    purpose: str | None = None
+
+    _p = field_validator("purpose")(lambda cls, v: _purpose(v))
 
 
-class VerifyIn(BaseModel):
+class SignupIn(BaseModel):
     email: str = Field(max_length=300)
     code: str = Field(max_length=20)
-    lang: str | None = None  # 새 계정이면 화면 언어로 저장한다
+    password: str = Field(max_length=200)
+    lang: str | None = None  # 새 계정의 화면 언어
+
+
+class ResetIn(BaseModel):
+    email: str = Field(max_length=300)
+    code: str = Field(max_length=20)
+    password: str = Field(max_length=200)
+
+
+class LoginIn(BaseModel):
+    email: str = Field(max_length=300)
+    password: str = Field(max_length=200)
+
+
+def _find_user(db: Session, email: str) -> User | None:
+    return db.scalars(select(User).where(func.lower(User.email) == email, User.is_synthetic.is_(False))).first()
+
+
+def _check_purpose(db: Session, email: str, purpose: str | None) -> User | None:
+    """가입은 아직 가입하지 않은 메일만, 비밀번호 찾기는 가입된 메일만 통과시킨다."""
+    user = _find_user(db, email)
+    if purpose == "reset" and user is None:
+        raise HTTPException(404, "가입된 메일이 아니에요. 회원가입을 해 주세요.")
+    if purpose == "signup" and user is not None:
+        raise HTTPException(409, "이미 가입된 메일이에요. 로그인해 주세요.")
+    return user
 
 
 def _auth_error(e: auth.AuthError) -> HTTPException:
     return HTTPException(e.code, e.message)
 
 
+def _email_or_422(raw: str) -> str:
+    try:
+        return auth.normalize_email(raw)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+
+
 @app.post("/api/auth/request-code")
 def request_code(body: RequestCodeIn, db: Session = Depends(get_db)):
+    email = _email_or_422(body.email)
+    _check_purpose(db, email, body.purpose)  # 안내만 하고 메일은 보내지 않는다
     try:
-        email = auth.normalize_email(body.email)
         code = auth.issue_code(db, email)
     except auth.AuthError as e:
         raise _auth_error(e)
@@ -270,21 +314,54 @@ def request_code(body: RequestCodeIn, db: Session = Depends(get_db)):
     return {"sent": True, **({"dev_code": code} if DEV_MODE else {})}
 
 
-@app.post("/api/auth/verify")
-def verify_code(body: VerifyIn, db: Session = Depends(get_db)):
+@app.post("/api/auth/signup")
+def signup(body: SignupIn, db: Session = Depends(get_db)):
+    """회원가입: 숙명 메일로 받은 코드를 한 번 확인하고 비밀번호를 정하면 계정이 만들어진다."""
+    email = _email_or_422(body.email)
     try:
-        email = auth.normalize_email(body.email)
+        auth.check_password_rules(body.password, email)  # 코드를 쓰기 전에 먼저 확인해 코드가 낭비되지 않게 한다
         auth.check_code(db, email, body.code)
     except auth.AuthError as e:
         raise _auth_error(e)
-    user = db.scalars(select(User).where(func.lower(User.email) == email)).first()
-    is_new = user is None
-    if is_new:
-        lang = body.lang if body.lang in [c for c, _ in UI_LANGS] else "ko"
-        user = User(name="", email=email, kind="", ui_lang=lang, onboarded=False, is_synthetic=False)
-        db.add(user)
-        db.commit()
-    return {"token": auth.create_token(db, user.id), "is_new": is_new}
+    if _find_user(db, email) is not None:
+        raise HTTPException(409, "이미 가입된 메일이에요. 로그인해 주세요.")
+    lang = body.lang if body.lang in [c for c, _ in UI_LANGS] else "ko"
+    user = User(name="", email=email, kind="", ui_lang=lang, onboarded=False, is_synthetic=False)
+    user.password_hash = auth.hash_password(body.password)
+    db.add(user)
+    db.commit()
+    return {"token": auth.create_token(db, user.id), "is_new": True}
+
+
+@app.post("/api/auth/login")
+def login(body: LoginIn, db: Session = Depends(get_db)):
+    """로그인: 메일(아이디)과 비밀번호. 코드는 필요 없다."""
+    email = _email_or_422(body.email)
+    try:
+        user = auth.login_with_password(db, email, body.password)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    return {"token": auth.create_token(db, user.id), "is_new": False}
+
+
+@app.post("/api/auth/reset-password")
+def reset_password(body: ResetIn, db: Session = Depends(get_db)):
+    """비밀번호 찾기(또는 비밀번호가 없는 옛 계정의 첫 설정): 메일 코드를 확인하고 새 비밀번호를 정한다."""
+    email = _email_or_422(body.email)
+    user = _find_user(db, email)
+    try:
+        auth.check_password_rules(body.password, email)
+        auth.check_code(db, email, body.code)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    if user is None:
+        raise HTTPException(404, "가입된 메일이 아니에요. 회원가입을 해 주세요.")
+    try:
+        auth.set_password(db, user, body.password)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    auth.revoke_all_tokens(db, user.id)  # 비밀번호를 바꾸면 다른 곳의 로그인은 모두 끊는다
+    return {"token": auth.create_token(db, user.id), "is_new": False}
 
 
 @app.post("/api/auth/logout")
