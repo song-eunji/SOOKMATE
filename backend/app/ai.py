@@ -527,6 +527,7 @@ def translate(text: str, target: str) -> str | None:
         '형식: {"text":"번역문"}',
         json.dumps({"번역할 언어": LANG_NAMES[target], "문장": text}, ensure_ascii=False),
         fast=True,
+        max_tokens=1000,
     )
     out = data.get("text") if data else None
     if isinstance(out, str) and 0 < len(out.strip()) <= max(300, len(text) * 4):
