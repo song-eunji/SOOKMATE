@@ -11,6 +11,7 @@ st 로 바꾸면 다국어 모델(sentence-transformers)을 씁니다.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -122,23 +123,56 @@ def culture_docs() -> list[dict]:
     return json.loads((DATA_DIR / "culture_docs.json").read_text(encoding="utf-8"))
 
 
-def retrieve(query: str, k: int = 3) -> list[dict]:
-    q = embed(query)
+def _keyword_hits(text: str, doc: dict) -> int:
+    t = text.lower()
+    return sum(1 for k in doc["topics"] if k.lower() in t)
+
+
+def retrieve(query: str, k: int = 3, prefs: list[str] | None = None, docs: list[dict] | None = None) -> list[dict]:
+    """관련 자료 상위 k개. prefs(개인 선호)가 있으면 선호마다 따로 찾아 일반 질의보다 우선한다.
+
+    docs 를 넘기면 그 목록에서 찾는다(다른 자료 묶음에도 같은 검색을 쓰도록).
+    """
+    docs = culture_docs() if docs is None else docs
+    prefs = [p for p in (prefs or []) if p and p.strip()]
+    # 임베딩은 임베딩 담당의 embed()·sim() 을 그대로 쓴다 (0~1 유사도)
+    qv = embed(query) if query.strip() else None
+    pvs = [(p, embed(p)) for p in prefs]
+
     scored = []
-    for d in culture_docs():
-        s = sim(q, embed(d["title"] + " " + d["text"]))
-        s += 0.3 * sum(1 for t in d["topics"] if t in query)
-        scored.append((s, d))
+    for d in docs:
+        dv = embed(d["title"] + " " + d["text"])
+        g_sim = sim(qv, dv) if qv is not None else 0.0
+        g_kw = _keyword_hits(query, d)
+        p_best, p_sim, p_kw = 0.0, 0.0, 0
+        for p, pv in pvs:
+            c, kw = sim(pv, dv), _keyword_hits(p, d)
+            if c + 0.5 * kw > p_best:
+                p_best, p_sim, p_kw = c + 0.5 * kw, c, kw
+        score = p_best + 0.5 * (g_sim + 0.3 * g_kw)  # 개인 선호가 일반 질의보다 우선
+        if g_kw or p_kw or max(g_sim, p_sim) > 0.05:  # 근거가 있는 자료만 (기존 기준 0.05 유지)
+            scored.append((score, d))
     scored.sort(key=lambda x: -x[0])
-    return [d for s, d in scored[:k] if s > 0.05]
+    return [d for _, d in scored[:k]]
 
 
 # ------------------------------------------------------------------------ LLM
-def llm_config() -> dict[str, str]:
+_llm_cache: dict[tuple, dict] = {}
+_LLM_CACHE_MAX = 2000
+# 번역처럼 짧고 자주 부르는 일은 빠르고 저렴한 모델로. 공급자마다 따로 고른다(Anthropic: 아래, Gemini: GEMINI_FAST_MODEL).
+FAST_MODEL = os.getenv("ANTHROPIC_FAST_MODEL", "claude-haiku-5-5")
+
+
+def llm_config(fast: bool = False) -> dict[str, str]:
+    """쓸 LLM 공급자와 모델. LLM_PROVIDER=auto 이면 GEMINI_API_KEY 가 있을 때 Gemini, 없으면 Anthropic."""
     provider = os.getenv("LLM_PROVIDER", "auto").strip().lower()
     if provider == "auto":
         provider = "gemini" if os.getenv("GEMINI_API_KEY") else "anthropic"
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if provider == "gemini" else os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    if provider == "gemini":
+        base = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        model = (os.getenv("GEMINI_FAST_MODEL") or base) if fast else base
+    else:
+        model = FAST_MODEL if fast else os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
     return {"provider": provider, "model": model}
 
 
@@ -172,14 +206,14 @@ def quota_status(payload: dict) -> dict:
     return result
 
 
-def llm_models() -> list[str]:
+def llm_models(fast: bool = False) -> list[str]:
     """기본 모델 + GEMINI_FALLBACK_MODELS(쉼표 구분). 무료 한도가 모델별이라 순서대로 시도한다."""
-    first = llm_config()["model"]
+    first = llm_config(fast)["model"]
     extra = [m.strip() for m in os.getenv("GEMINI_FALLBACK_MODELS", "").split(",") if m.strip()]
     return list(dict.fromkeys([first] + extra))
 
 
-def _gemini_text(model: str, key: str, system: str, user: str, config: dict) -> tuple[str | None, bool]:
+def _gemini_text(model: str, key: str, system: str, user: str, config: dict, max_tokens: int | None = None) -> tuple[str | None, bool]:
     """(text, retryable). retryable=True 이면 다음 모델로 넘어가도 되는 실패(한도·없는 모델·서버 오류)."""
     import httpx
     config = {**config, "model": model}
@@ -190,10 +224,10 @@ def _gemini_text(model: str, key: str, system: str, user: str, config: dict) -> 
     # Gemma 계열은 systemInstruction·JSON 모드를 받지 않으므로 지시를 본문 앞에 붙인다.
     gemma = model.startswith("gemma")
     body = ({"contents": [{"role": "user", "parts": [{"text": system + "\n\nJSON만 출력해.\n\n" + user}]}],
-             "generationConfig": {"maxOutputTokens": 4096}} if gemma else
+             "generationConfig": {"maxOutputTokens": max_tokens or 4096}} if gemma else
             {"systemInstruction": {"parts": [{"text": system}]},
              "contents": [{"role": "user", "parts": [{"text": user}]}],
-             "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": 4096}})
+             "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": max_tokens or 4096}})
     timeout = min(60, max(5, float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))))
     with httpx.Client(timeout=httpx.Timeout(timeout, connect=5)) as client:
         for attempt in range(2):
@@ -228,9 +262,14 @@ def _gemini_text(model: str, key: str, system: str, user: str, config: dict) -> 
     return "".join(part.get("text", "") for part in parts if not part.get("thought")), False
 
 
-def llm_json(system: str, user: str) -> dict | None:
-    """Select Gemini/Anthropic; malformed, blocked or failed responses return None."""
-    config = llm_config()
+def llm_json(system: str, user: str, fast: bool = False, max_tokens: int | None = None) -> dict | None:
+    """Gemini 또는 Anthropic 으로 JSON 답을 받는다. 키가 없거나 실패하거나 JSON 이 아니면 None.
+
+    fast=True 이면 번역처럼 짧고 자주 부르는 일에 맞는 빠른 모델을 쓴다.
+    입력이 같으면 저장해 둔 결과를 다시 쓴다(화면을 새로 열 때마다 호출·비용이 생기지 않게).
+    실패는 저장하지 않아서 다음 요청 때 다시 시도한다.
+    """
+    config = llm_config(fast)
     provider, model = config["provider"], config["model"]
     _set_llm_status("pending", **config)
     if provider not in ("gemini", "anthropic"):
@@ -240,14 +279,18 @@ def llm_json(system: str, user: str) -> dict | None:
     if not key:
         _set_llm_status("not_configured", **config)
         return None
+    ck = (provider, model, system, user, max_tokens)
+    if ck in _llm_cache:
+        _set_llm_status("ok", **config)
+        return copy.deepcopy(_llm_cache[ck])
     try:
         if provider == "gemini":
             text = None
-            for index, name in enumerate(llm_models()):
-                text, retryable = _gemini_text(name, key, system, user, config)
+            for index, name in enumerate(llm_models(fast)):
+                text, retryable = _gemini_text(name, key, system, user, config, max_tokens)
                 if text is not None or not retryable:
                     break
-                if index + 1 < len(llm_models()):
+                if index + 1 < len(llm_models(fast)):
                     log.info("Gemini %s 사용 불가, 다음 무료 모델로 전환", name)
             if text is None:
                 return None
@@ -256,7 +299,7 @@ def llm_json(system: str, user: str) -> dict | None:
             import anthropic
             with anthropic.Anthropic(api_key=key, timeout=15, max_retries=0) as client:
                 response = client.messages.create(
-                    model=model, max_tokens=1600, system=system,
+                    model=model, max_tokens=max_tokens or 1600, system=system,
                     messages=[{"role": "user", "content": user}],
                 )
                 if response.stop_reason != "end_turn":
@@ -267,7 +310,12 @@ def llm_json(system: str, user: str) -> dict | None:
         match = re.search(r"\{.*\}", text, re.S)
         data = json.loads(match.group(0)) if match else None
         _set_llm_status("ok" if isinstance(data, dict) else "invalid_response", **config)
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        if len(_llm_cache) >= _LLM_CACHE_MAX:
+            _llm_cache.clear()
+        _llm_cache[ck] = copy.deepcopy(data)
+        return data
     except Exception as error:
         # Never log provider response bodies, prompts, keys or credential-bearing URLs.
         import httpx
@@ -275,6 +323,20 @@ def llm_json(system: str, user: str) -> dict | None:
         _set_llm_status(status, **config)
         log.warning("%s LLM 호출 실패 (%s), 기본 카드로 대체", provider, type(error).__name__)
         return None
+
+
+# 화면 언어 코드 → LLM에 알려줄 언어 이름 (constants.UI_LANGS 와 같은 코드)
+LANG_NAMES = {"ko": "한국어", "en": "English", "ja": "日本語", "zh": "简体中文", "vi": "Tiếng Việt"}
+
+
+def _lang(user) -> str:
+    code = getattr(user, "ui_lang", None) or "ko"
+    return code if code in LANG_NAMES else "ko"
+
+
+def _limit(n: int, lang: str) -> int:
+    """글자 수 제한은 한국어 기준이라, 다른 언어는 같은 뜻이 더 길어지는 만큼 넉넉하게 준다."""
+    return n if lang == "ko" else n * 2
 
 
 def _valid_str_list(v, lo: int, hi: int, maxlen: int) -> bool:
@@ -301,47 +363,68 @@ def default_questions(partner, ex: dict) -> list[str]:
 
 def make_brief(me, partner, ex: dict) -> dict:
     prefs = list(partner.prefs or [])  # 개인 선호가 최우선. 사람이 입력한 값 그대로.
-    query = " ".join(prefs + ex["common_interests"] + ["첫 만남 식당 카페 주문 대화 시간"])
-    docs = retrieve(query, k=3)
+    similar = [p["theirs"] for p in ex.get("similar_interests", [])]
+    query = " ".join(ex["common_interests"] + similar + ["첫 만남 대화 약속 장소"])
+    docs = retrieve(query, k=3, prefs=prefs)
 
     mode = "fallback"
     tips: list[dict] = []
     questions: list[str] = []
 
+    lang = _lang(me)
+    rules = (
+        "너는 한국 대학 캠퍼스에서 유학생과 국내 학생의 첫 만남을 돕는 도우미야. JSON으로만 답해. "
+        "상대가 공개한 선호를 가장 먼저 반영하고, 국적이나 출신으로 상대의 성향을 짐작하지 마. "
+        "문장은 모두 '답변 언어'로 짧고 부담 없게 써. "
+    )
+    inp = {
+        "답변 언어": LANG_NAMES[lang],
+        "상대가 공개한 선호": prefs,
+        "공통 관심사": ex["common_interests"],
+        "뜻이 비슷한 관심사": [f"{p['mine']} / {p['theirs']}" for p in ex.get("similar_interests", [])],
+    }
+    q_ok = lambda d: d and _valid_str_list(d.get("questions"), 1, 4, _limit(80, lang))  # noqa: E731
+
     if docs:
         data = llm_json(
-            "너는 한국 대학 캠퍼스의 교류 만남을 돕는 도우미야. 주어진 문서 안의 내용만 사용해서 "
-            "짧은 안내와 첫 질문을 JSON으로만 답해. 형식: "
-            '{"tips":[{"text":"...","source_id":"문서 id"}],"questions":["..."]}. '
-            "문서에 없는 사실은 쓰지 마. 상대의 개인 선호는 문서보다 우선하니 반드시 존중해.",
+            rules
+            + "주어진 문서 안의 내용만 사용해서 짧은 안내와 첫 질문을 만들어. 문서에 없는 사실은 쓰지 마. "
+            "선호와 관련된 문서가 있으면 그 안내를 먼저 써. source_id는 문서 id 그대로 둬. "
+            '형식: {"tips":[{"text":"...","source_id":"문서 id"}],"questions":["..."]}',
             json.dumps(
-                {
-                    "상대가 공개한 선호": prefs,
-                    "공통 관심사": ex["common_interests"],
-                    "문서": [{"id": d["id"], "title": d["title"], "text": d["text"]} for d in docs],
-                },
+                {**inp, "문서": [{"id": d["id"], "title": d["title"], "text": d["text"]} for d in docs]},
                 ensure_ascii=False,
             ),
         )
         ids = {d["id"] for d in docs}
         if (
-            data
+            q_ok(data)
             and isinstance(data.get("tips"), list)
             and 1 <= len(data["tips"]) <= 3
             and all(
                 isinstance(t, dict)
                 and isinstance(t.get("text"), str)
-                and 0 < len(t["text"]) <= 200
+                and 0 < len(t["text"]) <= _limit(200, lang)
                 and t.get("source_id") in ids
                 for t in data["tips"]
             )
-            and _valid_str_list(data.get("questions"), 1, 4, 80)
         ):
             by_id = {d["id"]: d for d in docs}
             tips = [
                 {"text": t["text"], "source": by_id[t["source_id"]]["source"], "source_id": t["source_id"]}
                 for t in data["tips"]
             ]
+            questions = data["questions"]
+            mode = "llm"
+    else:
+        # 근거 자료가 없으면 사실 안내는 하지 않고, 직접 확인할 질문만 만든다 (기획서 6-(4))
+        data = llm_json(
+            rules
+            + "참고할 문서가 없으니 사실이나 문화 정보를 말하지 말고, 상대에게 직접 물어볼 첫 질문만 만들어. "
+            '형식: {"questions":["..."]}',
+            json.dumps(inp, ensure_ascii=False),
+        )
+        if q_ok(data):
             questions = data["questions"]
             mode = "llm"
 
@@ -355,15 +438,34 @@ def make_brief(me, partner, ex: dict) -> dict:
         "tips": tips,  # 문서가 없으면 빈 목록: 직접 확인할 질문만 보여줍니다.
         "questions": questions,
         "mode": mode,
+        "lang": lang if mode == "llm" else "ko",  # 문장이 어떤 언어로 나왔는지 (fallback 은 한국어 원문)
         "note": None if tips else "참고할 자료가 없어서 직접 물어볼 질문만 보여드려요.",
     }
 
 
 # --------------------------------------------------------------------- 활동 카드
+def _best_topic(teach: list[str], learn: list[str]) -> str | None:
+    """내가 알려줄 수 있는 것 중 상대가 배우고 싶은 것과 뜻이 가장 가까운 주제 (기획서 6-(4)).
+
+    글자가 똑같지 않아도(예: '한국어 표현' / 'Korean phrases') 임베딩으로 연결한다.
+    """
+    teach = [t for t in teach if t]
+    if not teach:
+        return None
+    learn = [x for x in learn if x]
+    if not learn:
+        return teach[0]
+    best_s, best_t = -1.0, teach[0]
+    for t in teach:
+        et = embed(t)
+        s = max(1.0 if t == x else sim(et, embed(x)) for x in learn)
+        if s > best_s:
+            best_s, best_t = s, t
+    return best_t
+
+
 def _pair_topics(me, partner) -> tuple[str | None, str | None]:
-    mine = (sorted(set(me.teach) & set(partner.learn)) or list(me.teach) or [None])[0]
-    theirs = (sorted(set(partner.teach) & set(me.learn)) or list(partner.teach) or [None])[0]
-    return mine, theirs
+    return _best_topic(list(me.teach), list(partner.learn)), _best_topic(list(partner.teach), list(me.learn))
 
 
 def make_activity_card(me, partner, ex: dict) -> dict:
@@ -382,20 +484,55 @@ def make_activity_card(me, partner, ex: dict) -> dict:
         "theirs": {"topic": theirs, "minutes": 10, "desc": f"{theirs}에 대해 10분 동안 알려줘요."},
         "mode": "fallback",
     }
+    lang = _lang(me)
     data = llm_json(
         "두 학생이 서로 하나씩 10분 동안 알려주는 활동 카드를 만들어줘. JSON으로만 답해. "
+        "각 문장에는 누가 무엇을 알려주는지가 드러나게 하고, 상대가 배우고 싶다고 한 것에 맞춰 구체적으로 써. "
+        "국적이나 출신으로 성향을 짐작하지 마. "
         '형식: {"mine":"내가 알려줄 활동 한 문장","theirs":"상대가 알려줄 활동 한 문장"}. '
-        "각 문장은 80자 이하, 주어진 주제만 사용.",
-        json.dumps({"내가 알려줄 주제": mine, "상대가 알려줄 주제": theirs}, ensure_ascii=False),
+        f"각 문장은 {_limit(80, lang)}자 이하, 주어진 주제만 사용. 문장은 '답변 언어'로 써.",
+        json.dumps(
+            {
+                "답변 언어": LANG_NAMES[lang],
+                "내가 알려줄 주제": mine,
+                "상대가 배우고 싶다고 한 것": list(partner.learn),
+                "상대가 알려줄 주제": theirs,
+                "내가 배우고 싶다고 한 것": list(me.learn),
+            },
+            ensure_ascii=False,
+        ),
     )
     if (
         data
-        and all(isinstance(data.get(k), str) and 0 < len(data[k]) <= 80 for k in ("mine", "theirs"))
+        and all(isinstance(data.get(k), str) and 0 < len(data[k]) <= _limit(80, lang) for k in ("mine", "theirs"))
     ):
         base["mine"]["desc"] = data["mine"]
         base["theirs"]["desc"] = data["theirs"]
         base["mode"] = "llm"
     return base
+
+
+# ------------------------------------------------------------------------- 번역
+def translate(text: str, target: str) -> str | None:
+    """사람이 쓴 글(채팅, 한 줄 소개, 공유 노트 등)을 target 언어로 번역. 실패하면 None.
+
+    원문은 DB에 그대로 두고, 읽는 사람이 원할 때만 화면에서 번역해 보여준다.
+    """
+    text = text.strip()
+    if not text or target not in LANG_NAMES:
+        return None
+    data = llm_json(
+        "너는 대학생 교류 앱의 번역기야. '문장'을 '번역할 언어'로 자연스럽게 번역해. "
+        "뜻을 더하거나 빼지 말고, 이모지·말투·고유명사는 살려. 설명 없이 JSON으로만 답해. "
+        '형식: {"text":"번역문"}',
+        json.dumps({"번역할 언어": LANG_NAMES[target], "문장": text}, ensure_ascii=False),
+        fast=True,
+        max_tokens=1000,
+    )
+    out = data.get("text") if data else None
+    if isinstance(out, str) and 0 < len(out.strip()) <= max(300, len(text) * 4):
+        return out.strip()
+    return None
 
 
 # --------------------------------------------------------------- 다음 활동 제안

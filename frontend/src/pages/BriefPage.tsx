@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Lock, MatchPicker } from "../components";
+import { Lock, MatchPicker, TranslateButton } from "../components";
 import { useI18n } from "../i18n";
 import type { ActivityCard, Brief, MatchView } from "../types";
 
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function BriefPage({ active, confirmed, onPick, goRec, goNote, flash }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [brief, setBrief] = useState<Brief | null>(null);
   const [card, setCard] = useState<ActivityCard | null>(null);
   const matchId = active?.id ?? null;
@@ -29,7 +29,7 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, fl
     return () => {
       alive = false;
     };
-  }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [matchId, lang]); // 화면 언어를 바꾸면 그 언어로 다시 받는다 // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!active) {
     return <Lock title={t("브리핑은 만남이 확정되면 보여요")} text={t("추천 탭에서 먼저 상대를 수락해 보세요.")} action={t("추천 보러 가기")} onAction={goRec} />;
@@ -57,6 +57,7 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, fl
                     {p}
                   </span>
                 ))}
+                <TranslateButton text={brief.prefs.join(" / ")} />
               </div>
             ) : (
               <p className="hint">{t("공개한 선호가 없어요. 직접 물어보면 좋아요.")}</p>
@@ -75,7 +76,7 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, fl
                 ))}
               </ul>
             ) : (
-              <p className="hint">{brief.note}</p>
+              <p className="hint">{brief.note && t(brief.note)}</p>
             )}
             {brief.mode === "fallback" && <p className="hint" style={{ marginTop: 6 }}>{t("AI가 만든 문장이 아니라 검토 자료를 그대로 보여주는 기본 안내예요.")}</p>}
           </section>

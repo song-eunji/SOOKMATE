@@ -21,6 +21,16 @@ from app.db import SessionLocal
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _fresh_llm_cache():
+    """LLM 결과는 입력이 같으면 저장해 두고 다시 쓰므로, 테스트끼리 섞이지 않게 매번 비운다."""
+    from app import ai
+
+    ai._llm_cache.clear()
+    yield
+    ai._llm_cache.clear()
+
+
 @pytest.fixture()
 def client():
     with TestClient(app) as c:
