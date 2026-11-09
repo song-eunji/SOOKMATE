@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { Avatar } from "../components";
+import { Avatar, TranslateButton } from "../components";
 import { useI18n } from "../i18n";
 
 /** 점수를 원형 링과 숫자로 보여준다 */
@@ -93,11 +93,17 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
                 </div>
                 <ScoreRing value={m.score.total} />
               </div>
-              {p.bio && <p className="bio">“{p.bio}”</p>}
+              {p.bio && (
+                <p className="bio">
+                  “{p.bio}”
+                  <TranslateButton text={p.bio} />
+                </p>
+              )}
 
               <div className="reason">
                 <small>{t("추천 이유")}</small>
                 {e.reason}
+                <TranslateButton text={e.reason} />
               </div>
 
               <div>

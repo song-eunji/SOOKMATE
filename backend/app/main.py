@@ -215,6 +215,10 @@ class BlockIn(BaseModel):
     user_id: int
 
 
+class TranslateIn(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+
 class ReportIn(BaseModel):
     user_id: int
     match_id: int | None = None
@@ -614,6 +618,14 @@ def get_activity_card(match_id: int, me: User = Depends(me_dep), db: Session = D
     m = my_match(db, match_id, me, confirmed=True)
     partner = views.partner_of(db, m, me.id)
     return ai.make_activity_card(me, partner, matching.explain(me, partner))
+
+
+# ------------------------------------------------------------------------- 번역
+@app.post("/api/translate")
+def translate_text(body: TranslateIn, me: User = Depends(me_dep)):
+    """사람이 쓴 글을 읽는 사람의 화면 언어로 번역한다. 실패하면 원문을 그대로 돌려준다."""
+    out = ai.translate(body.text, me.ui_lang)
+    return {"text": out or body.text, "translated": out is not None, "lang": me.ui_lang}
 
 
 # ------------------------------------------------------------------- 교류 노트

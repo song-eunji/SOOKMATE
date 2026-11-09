@@ -3,7 +3,7 @@ import { ApiError, api, compareActivities, generateActivity, loadActivity } from
 import ActivityResults from "./ActivityResults";
 import ActivityCompare from "./ActivityCompare";
 import NoteDialog from "./NoteDialog";
-import { Lock, MatchPicker } from "../components";
+import { Lock, MatchPicker, TranslateButton } from "../components";
 import type { MatchView, NoteData, NotesResponse, SavedActivity } from "../types";
 
 interface Props { active: MatchView | null; confirmed: MatchView[]; onPick: (id: number) => void; goRec: () => void; goChat: (matchId: number) => void; flash: (msg: string) => void; developerMode?: boolean }
@@ -146,7 +146,7 @@ export default function NotesPage({active, confirmed, onPick, goRec, goChat, fla
         {mine ? <div className="notes-entries">{FIELDS.filter((f) => mine[f.key].trim()).map((f) => <article key={f.key}><div className="notes-entry-label"><span>{f.label}</span><small className={mine[f.share] ? "note-shared" : "note-private"}>{mine[f.share] ? "공유함 · 추천에 사용" : "나만 보기 · 추천에 안 씀"}</small></div><p>{mine[f.key]}</p></article>)}</div>
         : <div className="notes-empty"><span aria-hidden="true">✎</span><h3>오늘 서로 무엇을 배웠나요?</h3><p>짧은 한 문장이면 충분해요.<br />공유할 내용은 직접 고를 수 있어요.</p><button className="btn" onClick={openEditor}>기록 남기기</button></div>}
       </section>
-      <section className="notes-panel"><h2>{name}님이 공유한 기록</h2>{theirsShared ? <div className="notes-entries">{FIELDS.filter((f) => theirs?.[f.key]).map((f) => <article key={f.key}><small>{f.label}</small><p>{theirs?.[f.key]}</p></article>)}</div> : <p className="notes-muted">아직 {name}님이 공유한 기록이 없어요. 내 기록만 있어도 추천받을 수 있어요.</p>}</section>
+      <section className="notes-panel"><h2>{name}님이 공유한 기록</h2>{theirsShared ? <div className="notes-entries">{FIELDS.filter((f) => theirs?.[f.key]).map((f) => <article key={f.key}><small>{f.label}</small><p>{theirs?.[f.key]}</p><TranslateButton text={theirs?.[f.key] ?? ""} /></article>)}</div> : <p className="notes-muted">아직 {name}님이 공유한 기록이 없어요. 내 기록만 있어도 추천받을 수 있어요.</p>}</section>
 
       <section className={`notes-next${sharedCount ? "" : " off"}`} aria-label="다음 활동 추천">
         <span className="notes-eyebrow"><span className="notes-num" aria-hidden="true">2</span>위 기록으로 다음 활동 추천받기</span>
