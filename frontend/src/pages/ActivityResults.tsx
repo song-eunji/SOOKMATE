@@ -8,6 +8,7 @@ interface Props {
   stored: SavedActivity;
   onRegenerate: () => void;
   onCompare: () => void;
+  onGoChat: () => void;
 }
 
 export const FIELD_LABEL: Record<string, string> = {expr: "배운 표현", fact: "알게 된 것", next_text: "다음 희망"};
@@ -28,9 +29,19 @@ export function StepText({text, sources}: {text: string; sources: ActivitySource
     if (i % 2 === 0) return <Fragment key={i}>{part}</Fragment>;
     return <Fragment key={i}>{part.split(/\s*,\s*/).map((id) => {
       const source = sources.find((s) => s.id === id);
-      return source ? <a key={id} className="cite" href={`#src-${id}`} title={source.title}>{PROVIDER[source.provider ?? ""]?.label ?? id}</a> : null;
+      // 주소창 해시(#note 등)는 탭 이동에 쓰이므로 바꾸지 않고, 아래 자료 목록이 있을 때만 스크롤한다.
+      return source ? <a key={id} className="cite" href={`#src-${id}`} title={source.title} onClick={(e) => {
+        e.preventDefault();
+        document.getElementById(`src-${id}`)?.scrollIntoView({behavior: "smooth", block: "center"});
+      }}>{PROVIDER[source.provider ?? ""]?.label ?? id}</a> : null;
     })}</Fragment>;
   })}</>;
+}
+
+/** 채팅으로 보낼 제안 문구. 출처 표시([S1])는 상대에게 의미가 없어 뺀다. */
+export function proposalText(activity: GeneratedActivity) {
+  const steps = activity.steps.map((s, i) => `${i + 1}. ${s.replace(/\s*\[S\d+(?:\s*,\s*S\d+)*\]/g, "")}`).join("\n");
+  return `[다음 교류 활동 제안]\n${activity.title}${activity.minutes ? ` (${activity.minutes}분)` : ""}\n\n${steps}\n\n괜찮다면 다음에 같이 해볼까요? 바꾸고 싶은 부분이 있으면 편하게 말해 주세요!`.slice(0, 500);
 }
 
 export function ActivityBody({activity}: {activity: GeneratedActivity}) {
@@ -46,7 +57,7 @@ export function ActivityBody({activity}: {activity: GeneratedActivity}) {
   </>;
 }
 
-export default function ActivityResults({matchId, partnerName, stored, onRegenerate, onCompare}: Props) {
+export default function ActivityResults({matchId, partnerName, stored, onRegenerate, onCompare, onGoChat}: Props) {
   const result = stored.retrieval;
   const [draft, setDraft] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -80,17 +91,20 @@ export default function ActivityResults({matchId, partnerName, stored, onRegener
     <textarea ref={messageInput} id="activity-message" maxLength={500} rows={9} value={draft} disabled={sending || sent} onChange={(e) => setDraft(e.target.value)} />
     <small>{draft.length} / 500</small>
     <button type="button" className="btn" disabled={sending || sent || !draft.trim()} onClick={send}>{sent ? "채팅으로 제안을 보냈어요 ✓" : sending ? "보내는 중…" : "채팅으로 제안 보내기"}</button>
-    {sent && <p role="status" className="banner ok">대화 탭에서 {partnerName}님의 답을 확인하세요.</p>}
+    {sent && <><p role="status" className="banner ok">채팅으로 보냈어요. {partnerName}님의 답은 대화방에서 확인할 수 있어요.</p>
+      <button type="button" className="btn ghost" onClick={onGoChat}>💬 {partnerName}님과의 대화방으로 가기 →</button></>}
     {error && <p role="alert" className="banner err">{error}</p>}
   </section>;
 
   return <div className="activity-results">
     <article className="act activity-card">
       <small className="notes-eyebrow">다음 만남 제안{stored.cached ? " · 저장된 추천" : ""}</small>
+      {result.avoided?.length ? (result.novel
+        ? <p className="hint">↻ 직전 추천 「{result.avoided[result.avoided.length - 1]}」과 장소·소재가 다른 활동으로 만들었어요.</p>
+        : <p className="hint">공유한 기록이 한 가지 주제라 이전 추천과 비슷하게 나왔어요. 다른 경험이나 다음 희망을 기록에 더하면 더 다양한 활동을 받을 수 있어요.</p>) : null}
       <ActivityBody activity={result} />
       <button type="button" className="btn" onClick={() => {
-        const steps = result.steps.map((s, i) => `${i + 1}. ${s.replace(/\s*\[S\d+(?:\s*,\s*S\d+)*\]/g, "")}`).join("\n");
-        setDraft(`[다음 교류 활동 제안]\n${result.title}${result.minutes ? ` (${result.minutes}분)` : ""}\n\n${steps}\n\n괜찮다면 다음에 같이 해볼까요? 바꾸고 싶은 부분이 있으면 편하게 말해 주세요!`.slice(0, 500));
+        setDraft(proposalText(result));
         setSent(false); setError(""); setComposerOpen(true);
       }}>💬 {partnerName}님에게 채팅으로 제안하기</button>
       <div className="row"><button type="button" className="btn ghost small" onClick={onRegenerate}>↻ 다른 활동 추천받기</button></div>

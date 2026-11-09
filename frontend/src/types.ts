@@ -156,6 +156,8 @@ export interface GeneratedActivity extends NextActivity {
   minutes?: number;
   prep?: string;
   search_providers?: Record<string, string>;
+  avoided?: string[];
+  novel?: boolean;
   search_status?: string;
   search_provider?: string;
   grounding?: { queries: string[]; segments: { text: string; source_ids: string[] }[]; search_entry_html: string } | null;

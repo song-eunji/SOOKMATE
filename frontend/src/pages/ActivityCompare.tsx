@@ -6,8 +6,8 @@ import type { SavedActivity } from "../types";
 interface Props { matchId: number; stored: SavedActivity; onBack: () => void }
 
 const SIDES = [
-  {id: "retrieval", label: "A · 기록 + 참고 자료", short: "자료 참고"},
-  {id: "baseline", label: "B · 기록만", short: "기록만"},
+  {id: "retrieval", label: "📚 자료를 찾아보고 만든 추천", short: "자료 찾아봄"},
+  {id: "baseline", label: "📝 기록만 보고 만든 추천", short: "기록만 봄"},
 ] as const;
 const CRITERIA = ["relevance", "feasibility", "specificity", "novelty"] as const;
 const DEFAULT_RUBRIC = ["노트 내용과의 관련성", "실제로 해보기 쉬움", "구체성", "새로움(지난 활동과의 차별성)"];
@@ -32,26 +32,26 @@ export default function ActivityCompare({matchId, stored, onBack}: Props) {
 
   return <div className="activity-results compare">
     <button type="button" className="link" onClick={onBack}>← 추천으로 돌아가기</button>
-    <p className="notes-muted">같은 공유 기록과 같은 AI 모델로 두 번 만들었어요. <strong>A</strong>는 활동 자료집·위키백과에서 찾은 자료를 함께 읽었고, <strong>B</strong>는 기록만 봤어요. 다른 조건은 모두 같아요.</p>
-    {!stored.comparable && <p className="banner wait">A가 인용한 자료가 없어 공정한 비교가 아니에요. 참고용으로만 보세요.</p>}
+    <p className="notes-muted">같은 기록으로 추천을 두 번 만들었어요. 한 번은 <strong>활동 자료집·위키백과를 찾아보고</strong>, 한 번은 <strong>기록만 보고</strong> 만들었어요. 다른 조건은 모두 같아요. 자료를 찾아보는 게 정말 도움이 되는지 확인해 보세요.</p>
+    {!stored.comparable && <p className="banner wait">이번 추천은 자료를 인용하지 않아서 두 방식의 차이를 비교하기 어려워요. 참고용으로만 보세요.</p>}
 
     {judge ? <section className="judge-card" aria-label="AI 블라인드 심사 결과">
-      <small className="notes-eyebrow">AI 블라인드 심사 · {judge.model ?? "AI"}</small>
-      <h3>{judge.winner === "tie" ? "두 추천이 비슷해요" : `${judge.winner === "retrieval" ? "A · 자료 참고" : "B · 기록만"} 추천이 더 좋았어요`}</h3>
-      <p className="hint">심사 AI는 어느 쪽이 자료를 썼는지 모르고, 순서도 무작위로 섞어서 봤어요. 기록만 보고 판단했어요.</p>
+      <small className="notes-eyebrow">AI 심사 결과</small>
+      <h3>{judge.winner === "tie" ? "두 추천이 비슷하다고 봤어요" : `${judge.winner === "retrieval" ? "자료를 찾아보고 만든" : "기록만 보고 만든"} 추천이 더 낫다고 봤어요`}</h3>
+      <p className="hint">공정하게 보도록, 심사한 AI에게는 어느 쪽이 자료를 찾아봤는지 알려주지 않았고 보여주는 순서도 섞었어요.</p>
       <div className="bars">{CRITERIA.map((key, i) => <div className="bar-row" key={key}>
         <span>{rubric[i]}</span>
         {SIDES.map((side) => <div className={`bar ${side.id}`} key={side.id} aria-label={`${side.short} ${judge.scores[side.id][key]}점`}>
-          <i style={{width: `${judge.scores[side.id][key] * 20}%`}} /><b>{side.id === "retrieval" ? "A" : "B"} {judge.scores[side.id][key]}</b>
+          <i style={{width: `${judge.scores[side.id][key] * 20}%`}} /><b>{side.short} {judge.scores[side.id][key]}점</b>
         </div>)}
       </div>)}</div>
-      <p className="judge-total">합계 A {judge.totals.retrieval} : B {judge.totals.baseline} / 20</p>
+      <p className="judge-total">합계 · 자료 찾아봄 {judge.totals.retrieval}점 / 기록만 봄 {judge.totals.baseline}점 (20점 만점)</p>
       {judge.reason && <p>“{judge.reason}”</p>}
     </section> : <p className="banner wait">AI 심사를 완료하지 못했어요 (무료 한도 등). 아래에서 직접 평가할 수 있어요.</p>}
 
     {auto && <section className="metric-table" aria-label="자동 지표">
       <h4>숫자로 본 차이 <small>규칙으로 계산한 참고 지표</small></h4>
-      <table><thead><tr><th scope="col">지표</th><th scope="col">A</th><th scope="col">B</th></tr></thead><tbody>
+      <table><thead><tr><th scope="col">지표</th><th scope="col">자료 찾아봄</th><th scope="col">기록만 봄</th></tr></thead><tbody>
         {(["note_coverage", "source_support", "concrete_details", "steps"] as const).map((key) => <tr key={key}>
           <th scope="row">{auto.retrieval[key].label}</th>
           {SIDES.map((s) => <td key={s.id}>{auto[s.id][key].value}{auto[s.id][key].total !== undefined ? ` / ${auto[s.id][key].total}` : ""}</td>)}

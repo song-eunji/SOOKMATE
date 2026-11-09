@@ -32,6 +32,11 @@ export function setUserId(id: number) {
   }
 }
 
+/** 화면이 상태별로 다르게 처리할 수 있게 HTTP 상태와 서버 상태 코드를 함께 담는다. */
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public code?: string) { super(message); }
+}
+
 async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -43,13 +48,15 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     let msg = res.statusText;
+    let code: string | undefined;
     try {
       const body = await res.json();
       msg = typeof body.detail === "string" ? body.detail : body.detail?.message ?? "요청을 처리하지 못했어요.";
+      code = typeof body.detail === "object" ? body.detail?.status : undefined;
     } catch {
       /* 본문이 JSON 이 아니면 statusText 사용 */
     }
-    throw new Error(msg);
+    throw new ApiError(msg, res.status, code);
   }
   return res.json() as Promise<T>;
 }

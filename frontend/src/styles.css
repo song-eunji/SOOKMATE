@@ -391,7 +391,7 @@ nav button { white-space: nowrap; }
 .metric-table h4 small { font-weight: 400; color: var(--muted); font-size: 11px; margin-left: 6px; }
 .metric-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .metric-table th, .metric-table td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); }
-.metric-table td { text-align: center; width: 64px; font-variant-numeric: tabular-nums; }
+.metric-table td { text-align: center; width: 76px; font-variant-numeric: tabular-nums; }
 .metric-table th[scope="col"] { color: var(--muted); font-weight: 700; }
 .compare-grid { display: grid; gap: 14px; }
 @media (min-width: 540px) { .compare-grid { grid-template-columns: 1fr 1fr; } }
@@ -401,3 +401,27 @@ nav button { white-space: nowrap; }
 .rate-row div { display: flex; gap: 4px; }
 .rate-row button { flex: 1; min-height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 700; }
 .rate-row button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* 노트 페이지: ① 기록 → ② 그 기록으로 추천 */
+.notes-num { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; vertical-align: 2px; }
+.notes-next .notes-eyebrow { display: flex; align-items: center; }
+.notes-next.off { background: var(--surface); border: 1px dashed var(--line); }
+.notes-next.off .notes-num { background: var(--line); color: var(--muted); }
+.notes-empty .btn { margin-top: 12px; }
+.notes-next .notes-experiment-link { background: var(--surface); }
+
+/* 대화방 위 '다음 활동 추천' 카드 */
+.chat-pin { background: var(--accent-soft); border-radius: 18px; overflow: hidden; }
+.chat-pin.empty { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 12px 14px; font-size: 13px; color: var(--muted); background: var(--soft); }
+.chat-pin.empty .link { font-size: 13px; }
+.chat-pin-head { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.chat-pin-head > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.chat-pin-head small { font-size: 12px; color: var(--accent-ink); font-weight: 600; }
+.chat-pin-head b { font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.chat-pin-toggle { flex: none; font-size: 12px; color: var(--muted); }
+.chat-pin-body { display: grid; gap: 10px; padding: 0 14px 14px; max-height: 55vh; overflow-y: auto; }
+.chat-pin-body h3 { display: none; }
+.chat-pin-body p { margin: 0; font-size: 14px; line-height: 1.6; }
+.chat-pin-body h4 { margin: 4px 0 0; font-size: 13px; }
+.chat-pin-body .link { justify-self: start; font-size: 13px; }
+.activity-context textarea { width: 100%; resize: vertical; font: inherit; line-height: 1.6; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }

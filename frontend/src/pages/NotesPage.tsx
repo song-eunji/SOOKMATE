@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { api, compareActivities, generateActivity, loadActivity } from "../api";
+import { ApiError, api, compareActivities, generateActivity, loadActivity } from "../api";
 import ActivityResults from "./ActivityResults";
 import ActivityCompare from "./ActivityCompare";
 import NoteDialog from "./NoteDialog";
 import { Lock, MatchPicker } from "../components";
 import type { MatchView, NoteData, NotesResponse, SavedActivity } from "../types";
 
-interface Props { active: MatchView | null; confirmed: MatchView[]; onPick: (id: number) => void; goRec: () => void; flash: (msg: string) => void; developerMode?: boolean }
+interface Props { active: MatchView | null; confirmed: MatchView[]; onPick: (id: number) => void; goRec: () => void; goChat: (matchId: number) => void; flash: (msg: string) => void; developerMode?: boolean }
 const EMPTY: NoteData = {expr: "", fact: "", next_text: "", share_expr: false, share_fact: false, share_next: false};
 const FIELDS = [
   {key: "expr", share: "share_expr", label: "새로 배운 표현", ph: "예: '아이스 아메리카노 한 잔 주세요'라는 주문 표현"},
@@ -34,7 +34,7 @@ function Pipeline({steps}: {steps: string[]}) {
   </div>;
 }
 
-export default function NotesPage({active, confirmed, onPick, goRec, flash}: Props) {
+export default function NotesPage({active, confirmed, onPick, goRec, goChat, flash}: Props) {
   const [mine, setMine] = useState<NoteData | null>(null);
   const [draft, setDraft] = useState<NoteData>(EMPTY);
   const [theirs, setTheirs] = useState<NotesResponse["partner_shared"]>(null);
@@ -82,7 +82,6 @@ export default function NotesPage({active, confirmed, onPick, goRec, flash}: Pro
   const theirsShared = FIELDS.filter((f) => theirs?.[f.key]).length;
   const sharedCount = mineShared + theirsShared;
   const hasMine = Boolean(mine && FIELDS.some((f) => mine[f.key].trim()));
-  const step = !hasMine && sharedCount === 0 ? 0 : sharedCount === 0 ? 1 : stored ? 3 : 2;
 
   const openEditor = () => {setDraft(mine ? {...mine} : {...EMPTY}); setError(""); setScreen("edit");};
   const close = () => { if (!saving) {setScreen(null); setError("");} };
@@ -106,6 +105,19 @@ export default function NotesPage({active, confirmed, onPick, goRec, flash}: Pro
       const response = await (mode === "compare" ? compareActivities(active.id) : generateActivity(active.id, regenerate));
       if (token === version.current) setStored(response);
     } catch (e) {
+      if (e instanceof ApiError && e.code === "in_progress") {
+        // 같은 대화의 추천을 이미 만드는 중(다른 탭·상대방): 오류 대신 완성될 때까지 기다렸다가 불러온다.
+        for (let i = 0; i < 30 && token === version.current; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          try {
+            const ready = await loadActivity(active.id);
+            if (ready && (mode === "activity" || ready.baseline) && ready.run_id !== stored?.run_id) {
+              if (token === version.current) setStored(ready);
+              return;
+            }
+          } catch { /* 계속 기다린다 */ }
+        }
+      }
       if (token === version.current) {
         setError((e as Error).message);
         try {
@@ -123,46 +135,36 @@ export default function NotesPage({active, confirmed, onPick, goRec, flash}: Pro
     finally {if (token === version.current) setSaving(false);}
   };
 
-  const steps = [
-    {title: "만남 기록 남기기", sub: hasMine ? "기록했어요" : theirsShared ? `${name}님이 기록했어요 · 나도 남기면 더 잘 맞춰져요` : "배운 표현이나 알게 된 것을 한 줄로"},
-    {title: "추천에 쓸 기록 공유하기", sub: sharedCount ? `공유 ${sharedCount}개 · 나 ${mineShared} · ${name}님 ${theirsShared}` : "공유한 항목만 추천에 쓰여요"},
-    {title: "다음 활동 추천받기", sub: stored ? "추천이 준비됐어요" : "기록 + 참고 자료로 20~30분 활동 제안"},
-  ];
-  const cta = step === 0 ? {label: "첫 기록 남기기", run: openEditor}
-    : step === 1 ? {label: "공유할 항목 고르기", run: openEditor}
-    : step === 2 ? {label: "다음 활동 추천받기", run: () => void recommend("activity")}
-    : {label: "추천받은 활동 보기", run: () => {setError(""); setScreen("activity");}};
+  const openActivity = () => {setError(""); setScreen("activity");};
+  const openCompare = () => {setError(""); if (stored?.baseline) setScreen("compare"); else void recommend("compare");};
 
   return <div className="notes-home">
     <MatchPicker matches={confirmed} activeId={active.id} onPick={onPick} />
-    <header className="notes-intro"><span className="notes-eyebrow">함께한 순간, 다음 만남으로</span><h1>{name}님과의<br />교류 노트</h1><p>서로 배운 것을 남기면,<br />그 기록을 바탕으로 다음에 함께할 활동을 찾아드려요.</p></header>
+    <header className="notes-intro"><span className="notes-eyebrow">교류 노트</span><h1>{name}님과의<br />교류 노트</h1><p>만남에서 배운 것을 남겨요. 공유한 기록으로 다음에 함께할 활동을 추천해 드려요.</p></header>
     {loading ? <p role="status">우리 기록을 불러오는 중이에요…</p> : <>
-      <section className="notes-steps" aria-label="다음 활동 추천까지의 단계">
-        <ol>{steps.map((s, i) => <li key={s.title} className={i < step ? "done" : i === step ? "now" : ""} aria-current={i === step ? "step" : undefined}>
-          <span className="notes-step-dot" aria-hidden="true">{i < step ? "✓" : i + 1}</span>
-          <div><strong>{s.title}</strong><small>{s.sub}</small></div>
-        </li>)}</ol>
-        <button className="btn" onClick={cta.run}>{cta.label} <span aria-hidden="true">→</span></button>
+      <section className="notes-panel"><div className="notes-section-head"><h2><span className="notes-num" aria-hidden="true">1</span>내 기록</h2>{mine && <button className="link" onClick={openEditor}>수정하기</button>}</div>
+        {mine ? <div className="notes-entries">{FIELDS.filter((f) => mine[f.key].trim()).map((f) => <article key={f.key}><div className="notes-entry-label"><span>{f.label}</span><small className={mine[f.share] ? "note-shared" : "note-private"}>{mine[f.share] ? "공유함 · 추천에 사용" : "나만 보기 · 추천에 안 씀"}</small></div><p>{mine[f.key]}</p></article>)}</div>
+        : <div className="notes-empty"><span aria-hidden="true">✎</span><h3>오늘 서로 무엇을 배웠나요?</h3><p>짧은 한 문장이면 충분해요.<br />공유할 내용은 직접 고를 수 있어요.</p><button className="btn" onClick={openEditor}>기록 남기기</button></div>}
       </section>
+      <section className="notes-panel"><h2>{name}님이 공유한 기록</h2>{theirsShared ? <div className="notes-entries">{FIELDS.filter((f) => theirs?.[f.key]).map((f) => <article key={f.key}><small>{f.label}</small><p>{theirs?.[f.key]}</p></article>)}</div> : <p className="notes-muted">아직 {name}님이 공유한 기록이 없어요. 내 기록만 있어도 추천받을 수 있어요.</p>}</section>
 
-      {stored && <section className="notes-next">
-        <span className="notes-eyebrow">다음 만남 제안</span>
-        <h2>{stored.retrieval.title}</h2>
-        <div className="chips">{stored.retrieval.minutes && <span className="chip">⏱ {stored.retrieval.minutes}분</span>}{stored.retrieval.prep && <span className="chip">준비물 · {stored.retrieval.prep}</span>}</div>
-        <p>{stored.retrieval.desc}</p>
-        <button className="btn ghost" onClick={() => {setError(""); setScreen("activity");}}>자세히 보고 채팅으로 제안하기</button>
-      </section>}
-
-      <section className="notes-panel"><div className="notes-section-head"><h2>내가 남긴 기록</h2><button className="link" onClick={openEditor}>{mine ? "수정하기" : "기록하기"} ↗</button></div>
-        {mine ? <div className="notes-entries">{FIELDS.filter((f) => mine[f.key].trim()).map((f) => <article key={f.key}><div className="notes-entry-label"><span>{f.label}</span><small className={mine[f.share] ? "note-shared" : "note-private"}>{mine[f.share] ? "공유 · 추천에 사용" : "나만 보기"}</small></div><p>{mine[f.key]}</p></article>)}</div>
-        : <div className="notes-empty"><span aria-hidden="true">✎</span><h3>오늘 서로 무엇을 배웠나요?</h3><p>짧은 한 문장이면 충분해요.<br />공유할 내용은 직접 선택할 수 있어요.</p></div>}
+      <section className={`notes-next${sharedCount ? "" : " off"}`} aria-label="다음 활동 추천">
+        <span className="notes-eyebrow"><span className="notes-num" aria-hidden="true">2</span>위 기록으로 다음 활동 추천받기</span>
+        {!sharedCount ? <p>{hasMine ? "공유한 기록이 없어요. 기록을 수정해서 추천에 쓸 항목을 공유해 주세요." : "먼저 위에 기록을 남기고 공유를 켜 주세요."}</p>
+        : stored ? <>
+          <h2>{stored.retrieval.title}</h2>
+          <div className="chips">{stored.retrieval.minutes && <span className="chip">⏱ {stored.retrieval.minutes}분</span>}{stored.retrieval.prep && <span className="chip">준비물 · {stored.retrieval.prep}</span>}</div>
+          <p>{stored.retrieval.desc}</p>
+          <button className="btn" onClick={openActivity}>자세히 보고 {name}님에게 제안하기 <span aria-hidden="true">→</span></button>
+        </> : <>
+          <p>공유한 기록 {sharedCount}개(나 {mineShared} · {name}님 {theirsShared})를 바탕으로 활동 자료집·위키백과를 찾아보고 20~30분짜리 활동을 만들어요.</p>
+          <button className="btn" onClick={() => void recommend("activity")}>다음 활동 추천받기 <span aria-hidden="true">→</span></button>
+        </>}
+        {sharedCount > 0 && <button className="notes-experiment-link" onClick={openCompare}>
+          <strong>🔬 자료를 찾아본 게 도움이 됐을까?</strong>
+          <span>같은 기록으로 자료 없이 만든 추천과 나란히 비교해요.</span>
+        </button>}
       </section>
-      <section className="notes-panel"><h2>{name}님이 나눈 기록</h2>{theirsShared ? <div className="notes-entries">{FIELDS.filter((f) => theirs?.[f.key]).map((f) => <article key={f.key}><small>{f.label}</small><p>{theirs?.[f.key]}</p></article>)}</div> : <p className="notes-muted">아직 공유한 기록이 없어요. 한쪽 기록만 있어도 추천받을 수 있어요.</p>}</section>
-
-      {sharedCount > 0 && <button className="notes-experiment-link" onClick={() => {setError(""); if (stored?.baseline) setScreen("compare"); else void recommend("compare");}}>
-        <strong>🔬 자료 검색이 정말 도움이 될까?</strong>
-        <span>같은 기록으로 자료 없이도 만들어 보고, 두 추천을 블라인드로 비교·평가해요.</span>
-      </button>}
     </>}
     {!screen && error && <p className="banner err" role="alert">{error}</p>}
 
@@ -186,7 +188,7 @@ export default function NotesPage({active, confirmed, onPick, goRec, flash}: Pro
       {busy && <Pipeline steps={busy === "compare" ? COMPARE_PIPELINE : PIPELINE} />}
       {!busy && error && <div className="notes-error"><p className="banner err" role="alert">{error}</p>
         <button className="btn" onClick={() => void recommend(screen)}>다시 시도하기</button></div>}
-      {!busy && stored && screen === "activity" && <ActivityResults key={stored.run_id} matchId={active.id} partnerName={name} stored={stored}
+      {!busy && stored && screen === "activity" && <ActivityResults key={stored.run_id} matchId={active.id} partnerName={name} stored={stored} onGoChat={() => goChat(active.id)}
         onRegenerate={() => void recommend("activity", true)} onCompare={() => {if (stored.baseline) setScreen("compare"); else void recommend("compare");}} />}
       {!busy && stored?.baseline && screen === "compare" && <ActivityCompare key={`${stored.run_id}-c`} matchId={active.id} stored={stored} onBack={() => setScreen("activity")} />}
     </NoteDialog>}
