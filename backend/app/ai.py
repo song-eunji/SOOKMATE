@@ -172,6 +172,62 @@ def quota_status(payload: dict) -> dict:
     return result
 
 
+def llm_models() -> list[str]:
+    """기본 모델 + GEMINI_FALLBACK_MODELS(쉼표 구분). 무료 한도가 모델별이라 순서대로 시도한다."""
+    first = llm_config()["model"]
+    extra = [m.strip() for m in os.getenv("GEMINI_FALLBACK_MODELS", "").split(",") if m.strip()]
+    return list(dict.fromkeys([first] + extra))
+
+
+def _gemini_text(model: str, key: str, system: str, user: str, config: dict) -> tuple[str | None, bool]:
+    """(text, retryable). retryable=True 이면 다음 모델로 넘어가도 되는 실패(한도·없는 모델·서버 오류)."""
+    import httpx
+    config = {**config, "model": model}
+    # Restrict the interpolated model to an identifier, never a URL/path.
+    if not re.fullmatch(r"[a-zA-Z0-9._-]+", model):
+        _set_llm_status("invalid_model", **config)
+        return None, True
+    # Gemma 계열은 systemInstruction·JSON 모드를 받지 않으므로 지시를 본문 앞에 붙인다.
+    gemma = model.startswith("gemma")
+    body = ({"contents": [{"role": "user", "parts": [{"text": system + "\n\nJSON만 출력해.\n\n" + user}]}],
+             "generationConfig": {"maxOutputTokens": 4096}} if gemma else
+            {"systemInstruction": {"parts": [{"text": system}]},
+             "contents": [{"role": "user", "parts": [{"text": user}]}],
+             "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": 4096}})
+    timeout = min(60, max(5, float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))))
+    with httpx.Client(timeout=httpx.Timeout(timeout, connect=5)) as client:
+        for attempt in range(2):
+            try:
+                response = client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    headers={"x-goog-api-key": key}, json=body,
+                )
+            except httpx.TransportError as error:
+                # 연결 끊김·시간 초과: 한 번 더 시도하고, 그래도 안 되면 다음 모델로 넘긴다.
+                if attempt == 0:
+                    time.sleep(1)
+                    continue
+                status = "timeout" if isinstance(error, httpx.TimeoutException) else "connection_error"
+                _set_llm_status(status, **config)
+                return None, True
+            if response.status_code in (500, 502, 503, 504) and attempt == 0:
+                time.sleep(0.5)
+                continue
+            break
+    if response.is_error:
+        status = {400: "invalid_request", 401: "authentication", 403: "permission_denied",
+                  404: "model_unavailable", 429: "rate_limited"}.get(response.status_code, "service_unavailable")
+        quota = quota_status(response.json()) if response.status_code == 429 else {"status": status}
+        _set_llm_status(**quota, http_status=response.status_code, attempts=attempt + 1, **config)
+        return None, response.status_code in (404, 429, 500, 502, 503, 504)
+    candidates = response.json().get("candidates", [])
+    if not candidates or candidates[0].get("finishReason") != "STOP":
+        _set_llm_status("incomplete_response", **config)
+        return None, False
+    parts = candidates[0].get("content", {}).get("parts", [])
+    return "".join(part.get("text", "") for part in parts if not part.get("thought")), False
+
+
 def llm_json(system: str, user: str) -> dict | None:
     """Select Gemini/Anthropic; malformed, blocked or failed responses return None."""
     config = llm_config()
@@ -186,37 +242,16 @@ def llm_json(system: str, user: str) -> dict | None:
         return None
     try:
         if provider == "gemini":
-            import httpx
-            # Restrict the interpolated model to an identifier, never a URL/path.
-            if not re.fullmatch(r"[a-zA-Z0-9._-]+", model):
-                _set_llm_status("invalid_model", **config)
-                return None
-            timeout = min(60, max(5, float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))))
-            with httpx.Client(timeout=httpx.Timeout(timeout, connect=5)) as client:
-                for attempt in range(2):
-                    response = client.post(
-                        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                        headers={"x-goog-api-key": key},
-                        json={"systemInstruction": {"parts": [{"text": system}]},
-                              "contents": [{"role": "user", "parts": [{"text": user}]}],
-                              "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": 4096}},
-                    )
-                    if response.status_code in (500, 502, 503, 504) and attempt == 0:
-                        time.sleep(0.5)
-                        continue
+            text = None
+            for index, name in enumerate(llm_models()):
+                text, retryable = _gemini_text(name, key, system, user, config)
+                if text is not None or not retryable:
                     break
-                if response.is_error:
-                    status = {400: "invalid_request", 401: "authentication", 403: "permission_denied",
-                              404: "model_unavailable", 429: "rate_limited"}.get(response.status_code, "service_unavailable")
-                    quota = quota_status(response.json()) if response.status_code == 429 else {"status": status}
-                    _set_llm_status(**quota, http_status=response.status_code, attempts=attempt + 1, **config)
-                    return None
-                candidates = response.json().get("candidates", [])
-                if not candidates or candidates[0].get("finishReason") != "STOP":
-                    _set_llm_status("incomplete_response", **config)
-                    return None
-                parts = candidates[0].get("content", {}).get("parts", [])
-                text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
+                if index + 1 < len(llm_models()):
+                    log.info("Gemini %s 사용 불가, 다음 무료 모델로 전환", name)
+            if text is None:
+                return None
+            config = {**config, "model": name}
         else:
             import anthropic
             with anthropic.Anthropic(api_key=key, timeout=15, max_retries=0) as client:

@@ -107,3 +107,33 @@ def test_daily_quota_is_distinct_from_minute_limit():
     ]}})
     assert result == {"status": "daily_quota_exhausted", "retry_after_seconds": 66545}
     assert ai.quota_status({"error": {"details": [{"violations": [{"quotaId": "RequestsPerMinute"}]}]}})["status"] == "minute_quota_exhausted"
+
+
+def test_quota_on_primary_model_falls_back_to_next_free_model(monkeypatch):
+    calls = []
+    ok = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": '{"title":"활동"}'}]}}]}
+    class Client:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            status = 429 if "primary" in url else 200
+            return httpx.Response(status, json=ok if status == 200 else {"error": {}}, request=httpx.Request("POST", url))
+    monkeypatch.setattr(httpx, "Client", Client)
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_MODEL", "primary")
+    monkeypatch.setenv("GEMINI_FALLBACK_MODELS", "gemma-x")
+    assert ai.llm_json("system", "user") == {"title": "활동"}
+    assert ai.llm_status() == {"status": "ok", "provider": "gemini", "model": "gemma-x"}
+    gemma_body = calls[1][1]["json"]
+    assert "systemInstruction" not in gemma_body  # Gemma 는 시스템 지시를 본문에 합친다
+    assert gemma_body["contents"][0]["parts"][0]["text"].startswith("system")
+
+
+def test_bad_request_does_not_burn_fallback_models(monkeypatch):
+    calls = fake_gemini(monkeypatch, {"error": {}}, status=400)
+    monkeypatch.setenv("GEMINI_FALLBACK_MODELS", "other")
+    assert ai.llm_json("s", "u") is None
+    assert len(calls) == 1
