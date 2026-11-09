@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, getUserId, setUserId } from "./api";
+import { SESSION_ENDED, api, clearToken, clearUserId, getToken, getUserId, setToken, setUserId } from "./api";
 import type { ChatRoom, MatchView, Me, Options, UserLite } from "./types";
 import { Logo } from "./components";
 import { isLang, useI18n } from "./i18n";
@@ -10,6 +10,7 @@ import ChatListPage from "./pages/ChatListPage";
 import BriefPage from "./pages/BriefPage";
 import NotesPage from "./pages/NotesPage";
 import BasicForm from "./pages/BasicForm";
+import LoginPage from "./pages/LoginPage";
 import NotificationPanel from "./features/notifications/NotificationPanel";
 import { navigateFromNotification } from "./features/notifications/navigate";
 import type { AppNotification } from "./features/notifications/types";
@@ -33,7 +34,9 @@ export default function App() {
   const { t, setLang } = useI18n();
   const [opts, setOpts] = useState<Options | null>(null);
   const [users, setUsers] = useState<UserLite[]>([]);
-  const [userId, setUid] = useState(getUserId());
+  const [userId, setUid] = useState<number | null>(getUserId());
+  // token = 학교 메일로 로그인, dev = 개발용 사용자(서버가 개발 모드일 때만), null = 로그인 전
+  const [mode, setMode] = useState<"token" | "dev" | null>(() => (getToken() ? "token" : getUserId() !== null ? "dev" : null));
   const [me, setMe] = useState<Me | null>(null);
   const [matches, setMatches] = useState<MatchView[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
@@ -94,21 +97,71 @@ export default function App() {
   }, [opts]);
 
   useEffect(() => {
+    if (!mode) return;
     reload().catch(() => setLoadError("서버에 연결하지 못했어요. 백엔드가 켜져 있는지 확인해 주세요."));
     // 상대가 수락했는지 보려고 몇 초마다 가볍게 새로고침
-    const t = window.setInterval(() => reload().catch(() => undefined), 4000);
-    return () => window.clearInterval(t);
-  }, [userId, reload]);
+    const timer = window.setInterval(() => reload().catch(() => undefined), 4000);
+    return () => window.clearInterval(timer);
+  }, [mode, userId, reload]);
 
-  const switchUser = (id: number) => {
-    setUserId(id);
-    setUid(id);
+  const resetData = () => {
     setActiveId(null);
     setInRoom(false);
     unreadRef.current = -1;
     setMe(null);
     setMatches([]);
     setRooms([]);
+  };
+
+  // 세션이 끝나면(로그아웃, 만료) 로그인 화면으로 돌아간다
+  const endSession = useCallback(() => {
+    clearToken();
+    clearUserId();
+    setUid(null);
+    setMode(null);
+    setActiveId(null);
+    setInRoom(false);
+    unreadRef.current = -1;
+    setMe(null);
+    setMatches([]);
+    setRooms([]);
+  }, []);
+
+  useEffect(() => {
+    const onEnded = () => {
+      endSession();
+      flash("로그인이 필요해요.");
+    };
+    window.addEventListener(SESSION_ENDED, onEnded);
+    return () => window.removeEventListener(SESSION_ENDED, onEnded);
+  }, [endSession, flash]);
+
+  const onLoggedIn = (token: string) => {
+    setToken(token);
+    clearUserId();
+    setUid(null);
+    resetData();
+    setMode("token");
+  };
+
+  const startAsDevUser = () => {
+    clearToken();
+    setUserId(1);
+    setUid(1);
+    resetData();
+    setMode("dev");
+  };
+
+  const logout = () => {
+    if (getToken()) api.logout().catch(() => undefined);
+    endSession();
+    flash("로그아웃했어요");
+  };
+
+  const switchUser = (id: number) => {
+    setUserId(id);
+    setUid(id);
+    resetData();
   };
 
   const confirmed = matches.filter((m) => m.status === "confirmed");
@@ -120,10 +173,15 @@ export default function App() {
     setTab("chat");
   };
 
+  const meIdRef = useRef<number | null>(null);
+  meIdRef.current = me?.id ?? null;
+
   const openNotification = async (notification: AppNotification) => {
+    const owner = me?.id;
+    if (owner === undefined) return;
     await navigateFromNotification<MatchView>(notification, {
-      userId,
-      currentUserId: getUserId,
+      userId: owner,
+      currentUserId: () => meIdRef.current ?? -1,
       loadMatches: api.matches,
       onMatches: setMatches,
       onChat: openChat,
@@ -139,13 +197,13 @@ export default function App() {
   const totalUnread = rooms.reduce((n, r) => n + r.unread, 0);
 
   return (
-    <div className={`app ${inChat ? "chatmode" : ""}`}>
+    <div className={`app ${inChat ? "chatmode" : ""} ${!mode ? "loginmode" : ""}`}>
       <header className="top">
         <Logo />
         <div className="notification-header-actions">
-          {opts?.dev_mode && users.length > 0 && (
+          {mode === "dev" && opts?.dev_mode && users.length > 0 && (
             <label className="dev" title="개발용 사용자 전환">
-              <select id="dev-user" aria-label="개발용 사용자" value={userId} onChange={(e) => switchUser(Number(e.target.value))}>
+              <select id="dev-user" aria-label="개발용 사용자" value={userId ?? ""} onChange={(e) => switchUser(Number(e.target.value))}>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name} · {u.kind === "domestic" ? "국내" : "유학생"}
@@ -154,15 +212,14 @@ export default function App() {
               </select>
             </label>
           )}
-          {me?.id === userId && (
-            <NotificationPanel key={userId} userId={userId} onNavigate={openNotification} />
-          )}
+          {me && <NotificationPanel key={me.id} userId={me.id} onNavigate={openNotification} />}
         </div>
       </header>
 
       <main>
         {loadError && <div className="banner err">{t(loadError)}</div>}
-        {!loadError && (!me || !opts) && (
+        {!loadError && opts && !mode && <LoginPage opts={opts} onLoggedIn={onLoggedIn} onDev={startAsDevUser} />}
+        {!loadError && (!opts || (mode && !me)) && (
           <div className="banner wait">
             <span className="spin" />
             {t("불러오는 중이에요.")}
@@ -171,7 +228,7 @@ export default function App() {
         {me && opts && !me.onboarded && <BasicForm me={me} opts={opts} first flash={flash} onSaved={reload} />}
         {me && opts && me.onboarded && (
           <>
-            {tab === "profile" && <ProfilePage me={me} opts={opts} flash={flash} onSaved={async () => { await reload(); setTab("rec"); }} />}
+            {tab === "profile" && <ProfilePage me={me} opts={opts} flash={flash} onLogout={logout} onSaved={async () => { await reload(); setTab("rec"); }} />}
             {tab === "rec" && <RecommendPage me={me} opts={opts} matches={matches} onChanged={reload} onOpenChat={openChat} flash={flash} />}
             {tab === "chat" && (inRoom && active ? (
               <ChatPage me={me} active={active} onBack={() => setInRoom(false)} onChanged={reload} flash={flash} goNote={() => setTab("note")} />

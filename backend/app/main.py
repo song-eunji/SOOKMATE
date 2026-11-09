@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -14,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from . import ai, matching, views
+from . import ai, auth, matching, views
 from .constants import BIO_MAX_LEN, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
 from .db import Base, SessionLocal, engine, ensure_columns, get_db
 from .models import ChatRead, Match, Message, Note, Report, User
@@ -25,6 +26,7 @@ from .scheduling.coordination import matching_lock, serialized
 from .scheduling.scheduler import scheduler_lifespan
 
 DEV_MODE = os.getenv("DEV_MODE", "1") == "1"
+log = logging.getLogger("sookmate")
 
 
 @asynccontextmanager
@@ -54,12 +56,30 @@ app.add_middleware(
 
 
 # --------------------------------------------------------------- 공통 의존성
-def me_dep(x_user_id: int | None = Header(default=None), db: Session = Depends(get_db)) -> User:
-    uid = x_user_id or int(os.getenv("DEFAULT_USER_ID", "1"))
-    user = db.get(User, uid)
-    if not user:
+def _bearer(authorization: str | None) -> str | None:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip() or None
+    return None
+
+
+def me_dep(
+    x_user_id: int | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    """로그인한 사용자. 토큰이 있으면 토큰만 믿고, 개발 모드에서만 X-User-Id 헤더로 사용자를 고를 수 있다."""
+    token = _bearer(authorization)
+    if token:
+        user = auth.user_from_token(db, token)
+        if user:
+            return user
+        raise HTTPException(401, "로그인이 필요해요.")
+    if DEV_MODE:
+        user = db.get(User, x_user_id or int(os.getenv("DEFAULT_USER_ID", "1")))
+        if user:
+            return user
         raise HTTPException(401, "알 수 없는 사용자예요.")
-    return user
+    raise HTTPException(401, "로그인이 필요해요.")
 
 
 app.include_router(create_notifications_router(me_dep))
@@ -141,6 +161,14 @@ class ProfileIn(BaseModel):
 class BasicIn(BaseModel):
     name: str = Field(max_length=NAME_MAX_LEN * 3)  # 공백 정리 뒤 길이는 아래에서 확인
     bio: str = Field(default="", max_length=BIO_MAX_LEN * 3)
+    kind: str | None = None  # 처음 한 번만: domestic(국내 학생) | international(유학생)
+
+    @field_validator("kind")
+    @classmethod
+    def _k(cls, v):
+        if v is not None and v not in ("domestic", "international"):
+            raise ValueError("국내 학생 또는 유학생 중에서 골라 주세요")
+        return v
 
     @field_validator("name")
     @classmethod
@@ -204,6 +232,7 @@ def options():
         "languages": LANGUAGES,
         "topics": TOPICS,
         "ui_langs": UI_LANGS,
+        "login_domain": auth.LOGIN_DOMAIN,
         "name_max_len": NAME_MAX_LEN,
         "bio_max_len": BIO_MAX_LEN,
         "weights": WEIGHTS,
@@ -219,6 +248,142 @@ def list_users(db: Session = Depends(get_db)):
     return [{"id": u.id, "name": u.name, "kind": u.kind} for u in db.scalars(select(User).order_by(User.id))]
 
 
+# ------------------------------------------------------------------ 학교 메일 로그인
+def _purpose(v):
+    if v not in (None, "signup", "reset"):
+        raise ValueError("purpose 는 signup 또는 reset 이어야 해요")
+    return v
+
+
+class RequestCodeIn(BaseModel):
+    email: str = Field(max_length=300)
+    # signup: 아직 가입하지 않은 메일만, reset: 이미 가입한 메일만(비밀번호 찾기·처음 설정), 없으면 둘 다 허용(시험용)
+    purpose: str | None = None
+
+    _p = field_validator("purpose")(lambda cls, v: _purpose(v))
+
+
+class SignupIn(BaseModel):
+    email: str = Field(max_length=300)
+    code: str = Field(max_length=20)
+    password: str = Field(max_length=200)
+    lang: str | None = None  # 새 계정의 화면 언어
+
+
+class ResetIn(BaseModel):
+    email: str = Field(max_length=300)
+    code: str = Field(max_length=20)
+    password: str = Field(max_length=200)
+
+
+class LoginIn(BaseModel):
+    email: str = Field(max_length=300)
+    password: str = Field(max_length=200)
+
+
+def _find_user(db: Session, email: str) -> User | None:
+    return db.scalars(select(User).where(func.lower(User.email) == email, User.is_synthetic.is_(False))).first()
+
+
+def _check_purpose(db: Session, email: str, purpose: str | None) -> User | None:
+    """가입은 아직 가입하지 않은 메일만, 비밀번호 찾기는 가입된 메일만 통과시킨다."""
+    user = _find_user(db, email)
+    if purpose == "reset" and user is None:
+        raise HTTPException(404, "가입된 메일이 아니에요. 회원가입을 해 주세요.")
+    if purpose == "signup" and user is not None:
+        raise HTTPException(409, "이미 가입된 메일이에요. 로그인해 주세요.")
+    return user
+
+
+def _auth_error(e: auth.AuthError) -> HTTPException:
+    return HTTPException(e.code, e.message)
+
+
+def _email_or_422(raw: str) -> str:
+    try:
+        return auth.normalize_email(raw)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+
+
+@app.post("/api/auth/request-code")
+def request_code(body: RequestCodeIn, db: Session = Depends(get_db)):
+    email = _email_or_422(body.email)
+    _check_purpose(db, email, body.purpose)  # 안내만 하고 메일은 보내지 않는다
+    try:
+        code = auth.issue_code(db, email)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    try:
+        auth.send_code_mail(email, code)
+    except auth.MailNotConfigured:
+        if not DEV_MODE:
+            raise HTTPException(503, "메일 발송이 설정되지 않았어요.")
+        log.info("개발 모드: %s 의 인증 코드는 %s", email, code)
+    except Exception:
+        log.exception("인증 메일을 보내지 못했어요")
+        raise HTTPException(503, "메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.")
+    return {"sent": True, **({"dev_code": code} if DEV_MODE else {})}
+
+
+@app.post("/api/auth/signup")
+def signup(body: SignupIn, db: Session = Depends(get_db)):
+    """회원가입: 숙명 메일로 받은 코드를 한 번 확인하고 비밀번호를 정하면 계정이 만들어진다."""
+    email = _email_or_422(body.email)
+    try:
+        auth.check_password_rules(body.password, email)  # 코드를 쓰기 전에 먼저 확인해 코드가 낭비되지 않게 한다
+        auth.check_code(db, email, body.code)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    if _find_user(db, email) is not None:
+        raise HTTPException(409, "이미 가입된 메일이에요. 로그인해 주세요.")
+    lang = body.lang if body.lang in [c for c, _ in UI_LANGS] else "ko"
+    user = User(name="", email=email, kind="", ui_lang=lang, onboarded=False, is_synthetic=False)
+    user.password_hash = auth.hash_password(body.password)
+    db.add(user)
+    db.commit()
+    return {"token": auth.create_token(db, user.id), "is_new": True}
+
+
+@app.post("/api/auth/login")
+def login(body: LoginIn, db: Session = Depends(get_db)):
+    """로그인: 메일(아이디)과 비밀번호. 코드는 필요 없다."""
+    email = _email_or_422(body.email)
+    try:
+        user = auth.login_with_password(db, email, body.password)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    return {"token": auth.create_token(db, user.id), "is_new": False}
+
+
+@app.post("/api/auth/reset-password")
+def reset_password(body: ResetIn, db: Session = Depends(get_db)):
+    """비밀번호 찾기(또는 비밀번호가 없는 옛 계정의 첫 설정): 메일 코드를 확인하고 새 비밀번호를 정한다."""
+    email = _email_or_422(body.email)
+    user = _find_user(db, email)
+    try:
+        auth.check_password_rules(body.password, email)
+        auth.check_code(db, email, body.code)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    if user is None:
+        raise HTTPException(404, "가입된 메일이 아니에요. 회원가입을 해 주세요.")
+    try:
+        auth.set_password(db, user, body.password)
+    except auth.AuthError as e:
+        raise _auth_error(e)
+    auth.revoke_all_tokens(db, user.id)  # 비밀번호를 바꾸면 다른 곳의 로그인은 모두 끊는다
+    return {"token": auth.create_token(db, user.id), "is_new": False}
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+    token = _bearer(authorization)
+    if token:
+        auth.revoke_token(db, token)
+    return {"ok": True}
+
+
 @app.get("/api/me")
 def get_me(me: User = Depends(me_dep), db: Session = Depends(get_db)):
     return views.user_me(db, me)
@@ -229,6 +394,10 @@ def put_basic(body: BasicIn, me: User = Depends(me_dep), db: Session = Depends(g
     taken = db.scalars(select(User).where(User.id != me.id)).all()
     if any(u.name.casefold() == body.name.casefold() for u in taken):
         raise HTTPException(409, "이미 쓰고 있는 닉네임이에요.")
+    if not me.kind:  # 새로 가입한 사람은 국내 학생인지 유학생인지 한 번 정한다 (이후에는 바꿀 수 없다)
+        if not body.kind:
+            raise HTTPException(422, "국내 학생인지 유학생인지 골라 주세요.")
+        me.kind = body.kind
     me.name, me.bio, me.onboarded = body.name, body.bio, True
     db.commit()
     return views.user_me(db, me)
@@ -401,10 +570,15 @@ async def post_message(match_id: int, body: MessageIn, me: User = Depends(me_dep
 
 
 @app.websocket("/ws/matches/{match_id}")
-async def ws_chat(ws: WebSocket, match_id: int, user_id: int):
+async def ws_chat(ws: WebSocket, match_id: int, token: str | None = None, user_id: int | None = None):
     with SessionLocal() as db:
+        if token:
+            who = auth.user_from_token(db, token)
+            user_id = who.id if who else None
+        elif not DEV_MODE:
+            user_id = None  # 개발 모드가 아니면 user_id 만으로는 들어올 수 없다
         m = db.get(Match, match_id)
-        ok = bool(m) and m.status == "confirmed" and user_id in (m.domestic_id, m.international_id)
+        ok = user_id is not None and bool(m) and m.status == "confirmed" and user_id in (m.domestic_id, m.international_id)
     if not ok:
         await ws.close(code=4403)
         return

@@ -28,6 +28,9 @@ class User(Base):
     prefs: Mapped[list] = mapped_column(JSON, default=list)  # 만나기 전 브리핑에 공개되는 선호
     weekly_cap: Mapped[int] = mapped_column(Integer, default=DEFAULT_WEEKLY_CAP)
     is_synthetic: Mapped[bool] = mapped_column(Boolean, default=False)
+    password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)  # scrypt$솔트$해시 (평문은 저장하지 않는다)
+    login_fails: Mapped[int] = mapped_column(Integer, default=0)  # 연속으로 비밀번호를 틀린 횟수
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 이 시각까지 로그인 잠금
 
 
 class Block(Base):
@@ -80,6 +83,33 @@ class Message(Base):
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LoginCode(Base):
+    """학교 메일로 보낸 인증 코드. 코드는 해시로만 저장하고, 한 번 쓰면 못 쓴다."""
+
+    __tablename__ = "login_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    salt: Mapped[str] = mapped_column(String(32))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class AuthToken(Base):
+    """로그인 세션. 토큰 자체는 저장하지 않고 해시만 둔다."""
+
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
 
 
 class ChatRead(Base):

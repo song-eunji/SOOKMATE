@@ -88,7 +88,7 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
                 <div className="grow">
                   <b>{p.name}</b>
                   <span className="m">
-                    {p.dept} · {p.langs.join(", ")}
+                    {[p.dept, p.langs.join(", ")].filter(Boolean).join(" · ")}
                   </span>
                 </div>
                 <ScoreRing value={m.score.total} />

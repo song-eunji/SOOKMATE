@@ -252,6 +252,48 @@ h2.plain { margin-bottom: 10px; }
 .langpick .chip { padding: 5px 13px; font-size: 13px; }
 nav button { white-space: nowrap; }
 
+/* 로그인: 가운데 정렬 로고, 입력칸, 큰 버튼 */
+.app.loginmode .top { display: none; }
+.app.loginmode main { padding: 16px 24px 24px; gap: 0; }
+.login { flex: 1; display: flex; flex-direction: column; min-height: calc(100dvh - 40px); }
+.login-top { display: flex; justify-content: flex-end; }
+.langselect { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px; background: var(--surface); color: var(--muted); }
+.langselect select { appearance: none; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px; padding: 2px 4px; cursor: pointer; }
+.login-body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 36px; padding-bottom: 56px; }
+.login-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.login-word { font-weight: 900; font-size: 32px; letter-spacing: 0.03em; line-height: 1; color: var(--accent-ink); }
+.login-tag { color: var(--muted); font-size: 15px; }
+.login-form { display: flex; flex-direction: column; gap: 14px; }
+.login-form .btn { padding: 17px 18px; font-size: 16px; }
+.login-step { text-align: center; display: flex; flex-direction: column; gap: 6px; }
+.login-step h1 { font-size: 22px; }
+.sent { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.mailfield { display: flex; align-items: center; background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; padding-right: 16px; }
+.mailfield:focus-within { border-color: var(--accent); }
+.mailfield input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 16px; padding: 17px 4px 17px 18px; }
+.mailfield input:focus-visible { outline: none; }
+.mailfield .suffix { flex: none; color: var(--muted); font-size: 15px; }
+.otp { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.otp .box { height: 58px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); display: grid; place-items: center; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.otp .box.on { border-color: var(--accent); }
+.otp:focus-within .box.on { box-shadow: 0 0 0 3px var(--accent-soft); }
+.otp-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; font-size: 16px; cursor: text; }
+.login-error { color: var(--err); font-size: 13.5px; text-align: center; }
+.login-dev { font-size: 12.5px; color: var(--muted); text-align: center; }
+.login-links { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.login-links .link[disabled] { opacity: 0.6; cursor: default; text-decoration: none; }
+.devlink { align-self: center; }
+.kindpick { display: flex; gap: 8px; }
+.account { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+
+.pwshow { flex: none; padding-right: 2px; }
+.pwhint { font-size: 12.5px; color: var(--muted); text-align: center; }
+.pwhint.bad { color: var(--err); }
+.login-title { font-size: 20px; text-align: center; }
+.login-error-box { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.login-switch { text-align: center; font-size: 14px; color: var(--muted); }
+.link.strong { color: var(--accent-ink); font-weight: 700; font-size: 14px; }
+
 .activity-results { display: grid; gap: 16px; margin-top: 16px; }
 .activity-context { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px; display: grid; gap: 10px; }
 .activity-signal { border-left: 3px solid var(--accent); padding-left: 12px; }

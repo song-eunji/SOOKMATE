@@ -9,6 +9,7 @@ interface Props {
   me: Me;
   opts: Options;
   onSaved: () => Promise<void>;
+  onLogout: () => void;
   flash: (msg: string) => void;
 }
 
@@ -24,7 +25,7 @@ function fromMe(me: Me) {
   };
 }
 
-export default function ProfilePage({ me, opts, onSaved, flash }: Props) {
+export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Props) {
   const { t } = useI18n();
   const [f, setF] = useState(fromMe(me));
   const [saving, setSaving] = useState(false);
@@ -164,6 +165,17 @@ export default function ProfilePage({ me, opts, onSaved, flash }: Props) {
       <button className="btn" disabled={!valid || saving} onClick={save}>
         {saving ? t("저장하는 중") : t("저장하고 추천 받기")}
       </button>
+
+      <div className="account">
+        {me.email && !me.email.endsWith("@example.com") && (
+          <p className="hint">
+            {t("로그인한 메일")}: {me.email}
+          </p>
+        )}
+        <button className="link" onClick={onLogout}>
+          {t("로그아웃")}
+        </button>
+      </div>
     </>
   );
 }

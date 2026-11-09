@@ -10,6 +10,7 @@ export interface Options {
   languages: string[];
   topics: string[];
   ui_langs: [string, string][]; // [코드, 표시 이름]
+  login_domain: string; // 로그인할 수 있는 메일 도메인
   name_max_len: number;
   bio_max_len: number;
   weights: Record<string, number>;
@@ -34,7 +35,9 @@ export interface Partner {
   learn: string[];
 }
 
-export interface Me extends Partner {
+export interface Me extends Omit<Partner, "kind"> {
+  kind: Kind | ""; // 새로 가입한 사람은 처음 설정 전까지 비어 있다
+  email: string;
   times: string[];
   prefs: string[];
   nationality: string | null;
@@ -57,6 +60,7 @@ export interface ProfileInput {
 export interface BasicInput {
   name: string;
   bio: string;
+  kind?: Kind; // 새로 가입한 사람만, 처음 한 번
 }
 
 export interface Explain {
