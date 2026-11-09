@@ -3,6 +3,7 @@ uvicorn[standard]>=0.30
 sqlalchemy>=2.0
 pydantic>=2
 ortools>=9.10
+apscheduler>=3.11,<4
 # 선택: AI 브리핑·활동 카드를 LLM으로 생성하려면 설치하고 ANTHROPIC_API_KEY를 설정하세요.
 # 설치하지 않거나 키가 없으면 기본 카드(fallback)가 나옵니다.
 anthropic>=0.40

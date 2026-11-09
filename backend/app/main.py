@@ -19,6 +19,10 @@ from .constants import BIO_MAX_LEN, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SL
 from .db import Base, SessionLocal, engine, ensure_columns, get_db
 from .models import ChatRead, Match, Message, Note, Report, User
 from .seed import seed_demo
+from .notifications.router import create_router as create_notifications_router
+from .notifications.service import message_event, read_messages
+from .scheduling.coordination import matching_lock, serialized
+from .scheduling.scheduler import scheduler_lifespan
 
 DEV_MODE = os.getenv("DEV_MODE", "1") == "1"
 
@@ -32,7 +36,12 @@ async def lifespan(app: FastAPI):
         if not db.scalars(select(User).limit(1)).first():
             seed_demo(db)
             matching.assign(db)
-    yield
+    with scheduler_lifespan() as scheduler:
+        app.state.scheduler = scheduler
+        try:
+            yield
+        finally:
+            app.state.scheduler = None
 
 
 app = FastAPI(title="SOOKMATE API", lifespan=lifespan)
@@ -51,6 +60,9 @@ def me_dep(x_user_id: int | None = Header(default=None), db: Session = Depends(g
     if not user:
         raise HTTPException(401, "알 수 없는 사용자예요.")
     return user
+
+
+app.include_router(create_notifications_router(me_dep))
 
 
 def run(fn, *args):
@@ -231,10 +243,11 @@ def put_language(body: LanguageIn, me: User = Depends(me_dep), db: Session = Dep
 
 @app.put("/api/me/profile")
 def put_profile(body: ProfileIn, me: User = Depends(me_dep), db: Session = Depends(get_db)):
-    me.interests, me.times, me.langs = body.interests, body.times, body.langs
-    me.teach, me.learn, me.prefs, me.nationality = body.teach, body.learn, body.prefs, body.nationality
-    db.commit()
-    matching.assign(db)  # 프로필이 바뀌면 자리가 남은 사람끼리 새로 배정
+    with matching_lock:
+        me.interests, me.times, me.langs = body.interests, body.times, body.langs
+        me.teach, me.learn, me.prefs, me.nationality = body.teach, body.learn, body.prefs, body.nationality
+        db.commit()
+        matching.assign(db)  # 프로필이 바뀌면 자리가 남은 사람끼리 새로 배정
     return views.user_me(db, me)
 
 
@@ -299,9 +312,16 @@ class Hub:
 hub = Hub()
 
 
+@serialized
 def _save_message(db: Session, match_id: int, sender_id: int, text: str) -> dict:
+    m = matching._locked(db, match_id)
+    matching._participant(m, sender_id)
+    if m.status != "confirmed":
+        raise matching.MatchError("양쪽이 수락한 만남에서만 쓸 수 있어요.", 403)
     msg = Message(match_id=match_id, sender_id=sender_id, text=text)
     db.add(msg)
+    db.flush()
+    message_event(db, m, msg)
     db.commit()
     return {"type": "message", **views.message_view(msg)}
 
@@ -311,6 +331,7 @@ def _last_read(db: Session, match_id: int, uid: int) -> int:
     return row.last_read_id if row else 0
 
 
+@serialized
 def _mark_read(db: Session, match_id: int, uid: int) -> int:
     """이 대화방의 마지막 메시지까지 읽은 것으로 기록하고, 그 메시지 번호를 돌려준다."""
     last_id = db.scalar(select(func.max(Message.id)).where(Message.match_id == match_id)) or 0
@@ -319,6 +340,7 @@ def _mark_read(db: Session, match_id: int, uid: int) -> int:
         row.last_read_id = max(row.last_read_id, last_id)
     else:
         db.add(ChatRead(match_id=match_id, user_id=uid, last_read_id=last_id))
+    read_messages(db, match_id, uid, last_id)
     db.commit()
     return last_id
 
@@ -373,7 +395,7 @@ def get_messages(match_id: int, me: User = Depends(me_dep), db: Session = Depend
 @app.post("/api/matches/{match_id}/messages")
 async def post_message(match_id: int, body: MessageIn, me: User = Depends(me_dep), db: Session = Depends(get_db)):
     my_match(db, match_id, me, confirmed=True)
-    payload = _save_message(db, match_id, me.id, body.text.strip())
+    payload = run(_save_message, db, match_id, me.id, body.text.strip())
     await hub.broadcast(match_id, payload)
     return payload
 
@@ -397,6 +419,8 @@ async def ws_chat(ws: WebSocket, match_id: int, user_id: int):
             with SessionLocal() as db:
                 payload = _save_message(db, match_id, user_id, text)
             await hub.broadcast(match_id, payload)
+    except matching.MatchError:
+        await ws.close(code=4403)
     except WebSocketDisconnect:
         pass
     finally:
@@ -575,12 +599,13 @@ def dev_reset(db: Session = Depends(get_db)):
     """DB를 비우고 합성 프로필 40명을 다시 넣은 뒤 첫 배정을 돌린다."""
     if not DEV_MODE:
         raise HTTPException(404)
-    db.close()
-    Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
-    with SessionLocal() as s:
-        seed_demo(s)
-        n = matching.assign(s)
+    with matching_lock:
+        db.close()
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+        with SessionLocal() as s:
+            seed_demo(s)
+            n = matching.assign(s)
     return {"users": 40, "matches": n}
 
 
@@ -606,6 +631,6 @@ async def dev_partner_message(match_id: int, me: User = Depends(me_dep), db: Ses
     m = my_match(db, match_id, me, confirmed=True)
     partner = views.partner_of(db, m, me.id)
     count = db.scalar(select(func.count(Message.id)).where(Message.match_id == match_id, Message.sender_id == partner.id)) or 0
-    payload = _save_message(db, match_id, partner.id, DEV_REPLIES[count % len(DEV_REPLIES)])
+    payload = run(_save_message, db, match_id, partner.id, DEV_REPLIES[count % len(DEV_REPLIES)])
     await hub.broadcast(match_id, payload)
     return {"ok": True}

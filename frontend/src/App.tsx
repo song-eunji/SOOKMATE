@@ -10,6 +10,9 @@ import ChatListPage from "./pages/ChatListPage";
 import BriefPage from "./pages/BriefPage";
 import NotesPage from "./pages/NotesPage";
 import BasicForm from "./pages/BasicForm";
+import NotificationPanel from "./features/notifications/NotificationPanel";
+import { navigateFromNotification } from "./features/notifications/navigate";
+import type { AppNotification } from "./features/notifications/types";
 
 type Tab = "profile" | "rec" | "chat" | "brief" | "note";
 
@@ -64,7 +67,9 @@ export default function App() {
   tabRef.current = tab;
 
   const reload = useCallback(async () => {
+    const requestedUser = getUserId();
     const [m, ms, rs] = await Promise.all([api.me(), api.matches(), api.chats()]);
+    if (getUserId() !== requestedUser) return;
     setMe(m);
     setMatches(ms);
     setRooms(rs);
@@ -115,6 +120,21 @@ export default function App() {
     setTab("chat");
   };
 
+  const openNotification = async (notification: AppNotification) => {
+    await navigateFromNotification<MatchView>(notification, {
+      userId,
+      currentUserId: getUserId,
+      loadMatches: api.matches,
+      onMatches: setMatches,
+      onChat: openChat,
+      onRecommendations: () => {
+        setInRoom(false);
+        setTab("rec");
+      },
+      onUnavailable: () => flash("만남을 찾을 수 없어요."),
+    });
+  };
+
   const inChat = tab === "chat" && inRoom && !!active;
   const totalUnread = rooms.reduce((n, r) => n + r.unread, 0);
 
@@ -122,17 +142,22 @@ export default function App() {
     <div className={`app ${inChat ? "chatmode" : ""}`}>
       <header className="top">
         <Logo />
-        {opts?.dev_mode && users.length > 0 && (
-          <label className="dev" title="개발용 사용자 전환">
-            <select id="dev-user" aria-label="개발용 사용자" value={userId} onChange={(e) => switchUser(Number(e.target.value))}>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} · {u.kind === "domestic" ? "국내" : "유학생"}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <div className="notification-header-actions">
+          {opts?.dev_mode && users.length > 0 && (
+            <label className="dev" title="개발용 사용자 전환">
+              <select id="dev-user" aria-label="개발용 사용자" value={userId} onChange={(e) => switchUser(Number(e.target.value))}>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} · {u.kind === "domestic" ? "국내" : "유학생"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {me?.id === userId && (
+            <NotificationPanel key={userId} userId={userId} onNavigate={openNotification} />
+          )}
+        </div>
       </header>
 
       <main>

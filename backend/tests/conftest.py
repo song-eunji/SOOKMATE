@@ -5,6 +5,7 @@ import tempfile
 _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ["DEV_MODE"] = "1"
+os.environ["SCHEDULER_ENABLED"] = "0"  # 일반 테스트에서는 예약 실행 비활성화
 os.environ.pop("ANTHROPIC_API_KEY", None)  # 테스트는 외부 AI 호출 금지
 os.environ.pop("GEMINI_API_KEY", None)
 os.environ.pop("TAVILY_API_KEY", None)
