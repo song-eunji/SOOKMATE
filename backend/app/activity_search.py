@@ -35,12 +35,14 @@ def _terms(text: str) -> list[str]:
     return [t for t in re.findall(r"[0-9A-Za-z가-힣\-]+", text) if len(t) >= 2]
 
 
-def search_library(query_text: str, keywords: list[str], k: int = 3) -> list[dict]:
-    """노트·키워드와 가장 가까운 활동 방법 k개. 태그가 직접 겹치면 가산점."""
+def search_library(query_text: str, keywords: list[str], k: int = 3, exclude: set[str] | None = None) -> list[dict]:
+    """노트·키워드와 가장 가까운 활동 방법 k개. 태그가 직접 겹치면 가산점. exclude 는 이미 제안에 쓴 자료(다시 추천받기)."""
     q = ai.embed(query_text)
     terms = set(_terms(" ".join(keywords) + " " + query_text))
     scored = []
     for doc in library():
+        if exclude and doc["id"] in exclude:
+            continue
         body = doc["title"] + " " + " ".join(doc["tags"]) + " " + doc["text"]
         score = ai.sim(q, ai.embed(body))
         # 대소문자 무시 (K-pop / K-POP)
@@ -99,7 +101,7 @@ def search_wikipedia(topics: list[str], k: int = 2) -> tuple[list[dict], str]:
     return found, "ok" if found else "empty"
 
 
-def search_sources(analysis: dict, notes: list[str]) -> dict:
+def search_sources(analysis: dict, notes: list[str], exclude: set[str] | None = None) -> dict:
     """세 공급원의 결과를 합쳐 S1.. ID를 붙인다. 공급원별 상태를 남겨 화면에서 보여준다."""
     keywords = analysis.get("keywords") or []
     topics = analysis.get("topics") or []
@@ -109,7 +111,7 @@ def search_sources(analysis: dict, notes: list[str]) -> dict:
 
     if enabled("ACTIVITY_SEARCH_ENABLED", "1"):
         query_text = " ".join(keywords + [s.get("text", "") for s in analysis.get("signals", [])] + notes)
-        lib = search_library(query_text, keywords)
+        lib = search_library(query_text, keywords, exclude=exclude)
         sources += lib
         providers["library"] = "ok" if lib else "empty"
 

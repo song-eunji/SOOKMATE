@@ -10,8 +10,8 @@ def setup_run(client, monkeypatch):
     calls = []
     monkeypatch.setattr(store, "analyze", lambda ex, notes: {"query": "도자기", "entries": ex["shared_entries"], "mode": "llm", "signals": [], "keywords": ["도자기"], "topics": []})
     monkeypatch.setattr(store.ai, "llm_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(store, "search_sources", lambda analysis, notes: {"sources": [{"id": "S1", "title": "자료", "url": "", "text": "자료", "provider": "library"}], "status": "ok", "provider": "library", "providers": {"library": "ok"}})
-    def generate(ex, notes, sources, analysis):
+    monkeypatch.setattr(store, "search_sources", lambda analysis, notes, exclude=None: {"sources": [{"id": "S1", "title": "자료", "url": "", "text": "자료", "provider": "library"}], "status": "ok", "provider": "library", "providers": {"library": "ok"}})
+    def generate(ex, notes, sources, analysis, avoid=None):
         calls.append(bool(sources))
         return {"title": "도자기 만들기", "desc": "설명", "basis": "shared_notes", "reason": "공유 희망", "steps": ["하나", "둘", "셋"], "sources": sources, "source_ids": ["S1"] if sources else [], "generation_mode": "llm", "generation_ms": 1, "llm_status": {"status": "ok"}}
     monkeypatch.setattr(store, "generate", generate)
@@ -73,6 +73,49 @@ def test_search_disabled_generates_without_sources(client, monkeypatch):
 
 def test_generation_failure_is_not_saved(client, monkeypatch):
     _, path, _ = setup_run(client, monkeypatch)
-    monkeypatch.setattr(store, "generate", lambda *a: {"generation_mode": "fallback", "llm_status": {"status": "timeout"}, "sources": []})
+    monkeypatch.setattr(store, "generate", lambda *a, **kw: {"generation_mode": "fallback", "llm_status": {"status": "timeout"}, "sources": []})
     assert client.post(path + "/next-activity", headers=h(1)).status_code == 503
     assert client.get(path + "/activity-result", headers=h(1)).json() is None
+
+
+def test_regenerate_avoids_previous_title_and_library_items(client, monkeypatch):
+    _, path, _ = setup_run(client, monkeypatch)
+    seen = []
+    def search(analysis, notes, exclude=None):
+        seen.append(set(exclude or ()))
+        return {"sources": [{"id": "S1", "title": "자료", "url": "", "text": "자료", "provider": "library", "library_id": f"lib-{len(seen)}"}],
+                "status": "ok", "provider": "library", "providers": {"library": "ok"}}
+    avoids = []
+    def generate(ex, notes, sources, analysis, avoid=None):
+        avoids.append(list(avoid or []))
+        return {"title": f"활동{len(avoids)}", "desc": "설명", "basis": "shared_notes", "reason": "이유", "steps": ["하나", "둘", "셋"],
+                "sources": sources, "source_ids": ["S1"] if sources else [], "generation_mode": "llm", "generation_ms": 1, "llm_status": {"status": "ok"}}
+    monkeypatch.setattr(store, "search_sources", search)
+    monkeypatch.setattr(store, "generate", generate)
+    client.post(path + "/next-activity", headers=h(1))
+    client.post(path + "/next-activity?regenerate=true", headers=h(1))
+    third = client.post(path + "/next-activity?regenerate=true", headers=h(1)).json()
+    assert avoids == [[], ["활동1"], ["활동1", "활동2"]]
+    assert seen == [set(), {"lib-1"}, {"lib-1", "lib-2"}]
+    assert third["retrieval"]["title"] == "활동3"
+
+
+def test_lock_is_per_match_not_global(client, monkeypatch):
+    held = store._match_lock(999)
+    held.acquire()  # 다른 매치에서 생성 중
+    try:
+        _, path, _ = setup_run(client, monkeypatch)
+        assert client.post(path + "/next-activity", headers=h(1)).status_code == 200
+    finally:
+        held.release()
+
+
+def test_same_match_in_progress_returns_structured_409(client, monkeypatch):
+    m, path, _ = setup_run(client, monkeypatch)
+    lock = store._match_lock(m["id"])
+    lock.acquire()
+    try:
+        response = client.post(path + "/next-activity", headers=h(1))
+        assert response.status_code == 409 and response.json()["detail"]["status"] == "in_progress"
+    finally:
+        lock.release()
