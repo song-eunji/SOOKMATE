@@ -11,6 +11,9 @@ import BriefPage from "./pages/BriefPage";
 import NotesPage from "./pages/NotesPage";
 import BasicForm from "./pages/BasicForm";
 import LoginPage from "./pages/LoginPage";
+import NotificationPanel from "./features/notifications/NotificationPanel";
+import { navigateFromNotification } from "./features/notifications/navigate";
+import type { AppNotification } from "./features/notifications/types";
 
 type Tab = "profile" | "rec" | "chat" | "brief" | "note";
 
@@ -67,7 +70,9 @@ export default function App() {
   tabRef.current = tab;
 
   const reload = useCallback(async () => {
+    const requestedUser = getUserId();
     const [m, ms, rs] = await Promise.all([api.me(), api.matches(), api.chats()]);
+    if (getUserId() !== requestedUser) return;
     setMe(m);
     setMatches(ms);
     setRooms(rs);
@@ -168,6 +173,26 @@ export default function App() {
     setTab("chat");
   };
 
+  const meIdRef = useRef<number | null>(null);
+  meIdRef.current = me?.id ?? null;
+
+  const openNotification = async (notification: AppNotification) => {
+    const owner = me?.id;
+    if (owner === undefined) return;
+    await navigateFromNotification<MatchView>(notification, {
+      userId: owner,
+      currentUserId: () => meIdRef.current ?? -1,
+      loadMatches: api.matches,
+      onMatches: setMatches,
+      onChat: openChat,
+      onRecommendations: () => {
+        setInRoom(false);
+        setTab("rec");
+      },
+      onUnavailable: () => flash("만남을 찾을 수 없어요."),
+    });
+  };
+
   const inChat = tab === "chat" && inRoom && !!active;
   const totalUnread = rooms.reduce((n, r) => n + r.unread, 0);
 
@@ -175,17 +200,20 @@ export default function App() {
     <div className={`app ${inChat ? "chatmode" : ""} ${!mode ? "loginmode" : ""}`}>
       <header className="top">
         <Logo />
-        {mode === "dev" && opts?.dev_mode && users.length > 0 && (
-          <label className="dev" title="개발용 사용자 전환">
-            <select id="dev-user" aria-label="개발용 사용자" value={userId ?? ""} onChange={(e) => switchUser(Number(e.target.value))}>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} · {u.kind === "domestic" ? "국내" : "유학생"}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <div className="notification-header-actions">
+          {mode === "dev" && opts?.dev_mode && users.length > 0 && (
+            <label className="dev" title="개발용 사용자 전환">
+              <select id="dev-user" aria-label="개발용 사용자" value={userId ?? ""} onChange={(e) => switchUser(Number(e.target.value))}>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} · {u.kind === "domestic" ? "국내" : "유학생"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {me && <NotificationPanel key={me.id} userId={me.id} onNavigate={openNotification} />}
+        </div>
       </header>
 
       <main>
@@ -203,12 +231,12 @@ export default function App() {
             {tab === "profile" && <ProfilePage me={me} opts={opts} flash={flash} onLogout={logout} onSaved={async () => { await reload(); setTab("rec"); }} />}
             {tab === "rec" && <RecommendPage me={me} opts={opts} matches={matches} onChanged={reload} onOpenChat={openChat} flash={flash} />}
             {tab === "chat" && (inRoom && active ? (
-              <ChatPage me={me} active={active} onBack={() => setInRoom(false)} onChanged={reload} flash={flash} />
+              <ChatPage me={me} active={active} onBack={() => setInRoom(false)} onChanged={reload} flash={flash} goNote={() => setTab("note")} />
             ) : (
               <ChatListPage me={me} rooms={rooms} onOpen={openChat} goRec={() => setTab("rec")} />
             ))}
             {tab === "brief" && <BriefPage active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} goNote={() => setTab("note")} flash={flash} />}
-            {tab === "note" && <NotesPage active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} flash={flash} />}
+            {tab === "note" && <NotesPage developerMode={Boolean(opts?.dev_mode)} active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} goChat={openChat} flash={flash} />}
           </>
         )}
       </main>
