@@ -43,7 +43,9 @@ def search_library(query_text: str, keywords: list[str], k: int = 3) -> list[dic
     for doc in library():
         body = doc["title"] + " " + " ".join(doc["tags"]) + " " + doc["text"]
         score = ai.sim(q, ai.embed(body))
-        tag_hits = [tag for tag in doc["tags"] if any(tag in term or term in tag for term in terms if len(term) >= 2)]
+        # 대소문자 무시 (K-pop / K-POP)
+        tag_hits = [tag for tag in doc["tags"] if any(tag.lower() in term.lower() or term.lower() in tag.lower()
+                                                      for term in terms if len(term) >= 2)]
         score += 0.12 * len(tag_hits)
         scored.append((score, tag_hits, doc))
     scored.sort(key=lambda row: -row[0])

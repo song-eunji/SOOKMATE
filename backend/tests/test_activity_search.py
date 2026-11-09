@@ -75,3 +75,17 @@ def test_auto_metrics_count_note_coverage_and_supported_steps():
     assert metrics["note_coverage"] == {"value": 1, "total": 2, "label": "공유 기록 반영"}
     assert metrics["source_support"]["value"] == 1
     assert metrics["concrete_details"]["value"] >= 2
+
+
+def test_every_selectable_interest_and_topic_has_a_tag_matched_activity():
+    # 프로필에서 고를 수 있는 모든 관심사·주제는 자료집에서 태그로 직접 이어지는 활동이 있어야 한다.
+    from app.constants import INTERESTS, TOPICS
+    missing = [w for w in INTERESTS + TOPICS if not any(s["matched"] for s in search.search_library(w, [w]))]
+    assert missing == []
+
+
+def test_library_entries_are_well_formed():
+    ids = [d["id"] for d in search.library()]
+    assert len(ids) == len(set(ids))
+    for doc in search.library():
+        assert doc["title"] and doc["tags"] and 10 <= doc["minutes"] <= 40 and len(doc["text"]) <= 400
