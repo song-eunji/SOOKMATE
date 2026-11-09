@@ -94,8 +94,8 @@ export const compareActivities = (id: number) => req<import("./types").SavedActi
   `/matches/${id}/next-activity?compare=true`, { method: "POST" },
 );
 
-export const generateActivity = (id: number) => req<import("./types").SavedActivity>(
-  `/matches/${id}/next-activity`, { method: "POST" },
+export const generateActivity = (id: number, regenerate = false) => req<import("./types").SavedActivity>(
+  `/matches/${id}/next-activity${regenerate ? "?regenerate=true" : ""}`, { method: "POST" },
 );
 
 export const loadActivity = (id: number) => req<import("./types").SavedActivity | null>(`/matches/${id}/activity-result`);

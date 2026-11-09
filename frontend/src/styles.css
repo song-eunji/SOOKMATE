@@ -331,3 +331,73 @@ nav button { white-space: nowrap; }
 .notes-used-entry p { white-space: pre-wrap; }
 .notes-search-attribution { border-top: 1px solid var(--line); padding-top: 16px; }
 .notes-search-attribution > small { display: block; color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+
+/* ---- 교류 노트 → 다음 활동 흐름 ---- */
+.notes-steps { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 18px; display: grid; gap: 14px; }
+.notes-steps ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.notes-steps li { display: flex; gap: 12px; align-items: center; padding: 8px 6px; border-radius: 14px; color: var(--muted); }
+.notes-steps li.now { background: var(--accent-soft); color: var(--ink); }
+.notes-steps li.done { color: var(--ink); }
+.notes-steps li div { display: grid; gap: 2px; min-width: 0; }
+.notes-steps strong { font-size: 14px; }
+.notes-steps small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.notes-step-dot { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--soft); color: var(--muted); }
+.notes-steps li.now .notes-step-dot { background: var(--accent); color: var(--on-accent); }
+.notes-steps li.done .notes-step-dot { background: var(--ok-soft); color: var(--ok); }
+.notes-steps .btn { display: flex; justify-content: space-between; align-items: center; }
+.notes-share-toggle { display: flex !important; align-items: center; gap: 8px; font-weight: 400 !important; font-size: 13px !important; color: var(--ink) !important; }
+.notes-share-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.notes-share-toggle small { margin-left: auto; font-size: 11px; color: var(--muted); }
+.notes-experiment-link { display: grid; gap: 4px; width: 100%; border: 1px dashed var(--line); border-radius: 18px; padding: 14px 16px; background: transparent; color: var(--ink); }
+.notes-experiment-link strong { font-size: 14px; }
+.notes-error { display: grid; gap: 12px; }
+.pipeline { list-style: none; margin: 0 auto; padding: 0; display: grid; gap: 8px; text-align: left; font-size: 14px; max-width: 320px; }
+.pipeline li { color: var(--muted); padding-left: 26px; position: relative; }
+.pipeline li::before { content: "○"; position: absolute; left: 4px; }
+.pipeline li.now { color: var(--accent-ink); font-weight: 700; }
+.pipeline li.now::before { content: "●"; }
+.pipeline li.done { color: var(--ok); }
+.pipeline li.done::before { content: "✓"; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: var(--soft); color: var(--ink); }
+.chip.alt { background: var(--warm-soft); color: var(--warm-ink); }
+.activity-steps li { line-height: 1.6; }
+.cite { display: inline-block; margin-left: 4px; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent-ink); text-decoration: none; vertical-align: 1px; }
+.activity-why, .activity-sources, .judge-card, .metric-table { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: grid; gap: 10px; overflow-wrap: anywhere; }
+.activity-why h4, .activity-sources h4, .metric-table h4 { margin: 0; }
+.activity-why p { font-size: 14px; line-height: 1.7; }
+.quote-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.quote-list li { border-left: 3px solid var(--accent); padding: 2px 0 2px 10px; font-size: 13px; color: var(--muted); }
+.quote-list small { display: block; font-size: 11px; color: var(--accent-ink); font-weight: 700; }
+.activity-sources details.cited { border-color: var(--accent); }
+.activity-sources summary { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.activity-sources summary em { font-style: normal; font-size: 11px; color: var(--ok); font-weight: 700; margin-left: auto; }
+.activity-sources small { color: var(--muted); font-size: 11px; }
+.badge { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: var(--soft); color: var(--muted); }
+.badge.library { background: var(--accent-soft); color: var(--accent-ink); }
+.badge.wikipedia { background: var(--ok-soft); color: var(--ok); }
+.badge.google { background: var(--warm-soft); color: var(--warm-ink); }
+.activity-trace ol { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; font-size: 13px; }
+.activity-trace strong { margin-right: 6px; }
+.judge-card h3 { margin: 0; font-size: 18px; }
+.judge-card > p:last-child { font-size: 13px; color: var(--muted); }
+.bars { display: grid; gap: 10px; }
+.bar-row { display: grid; gap: 4px; font-size: 12px; }
+.bar { position: relative; height: 20px; border-radius: 6px; background: var(--soft); overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .85; }
+.bar.baseline i { background: var(--muted); opacity: .5; }
+.bar b { position: relative; font-size: 11px; padding-left: 8px; line-height: 20px; color: var(--ink); }
+.judge-total { font-weight: 700; font-size: 14px; }
+.metric-table h4 small { font-weight: 400; color: var(--muted); font-size: 11px; margin-left: 6px; }
+.metric-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.metric-table th, .metric-table td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.metric-table td { text-align: center; width: 64px; font-variant-numeric: tabular-nums; }
+.metric-table th[scope="col"] { color: var(--muted); font-weight: 700; }
+.compare-grid { display: grid; gap: 14px; }
+@media (min-width: 540px) { .compare-grid { grid-template-columns: 1fr 1fr; } }
+.side-retrieval { color: var(--accent-ink); }
+.side-baseline { color: var(--muted); }
+.rate-row { display: grid; gap: 6px; font-size: 12px; }
+.rate-row div { display: flex; gap: 4px; }
+.rate-row button { flex: 1; min-height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 700; }
+.rate-row button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
