@@ -1,0 +1,852 @@
+[
+ {
+  "scenario": "주문 표현 + 빠른 말",
+  "notes": [
+   "카페에서 '아이스 아메리카노 한 잔 주세요' 표현을 배웠다.",
+   "직원이 말을 빨리 해서 포장인지 묻는 걸 못 알아들었다."
+  ],
+  "keywords": [
+   "카페 주문",
+   "역할극",
+   "듣기 연습",
+   "음료 주문"
+  ],
+  "topics": [
+   "카페"
+  ],
+  "providers": {
+   "library": "ok",
+   "wikipedia": "ok",
+   "google": "disabled"
+  },
+  "sources": [
+   "천천히 주문 역할극",
+   "카페 메뉴로 보는 문화 차이",
+   "지난번 헷갈린 표현 다시 보기",
+   "카페 (위키백과)"
+  ],
+  "retrieval": {
+   "title": "카페 주문 역할극과 빠른 질문 대처 연습",
+   "desc": "표현을 배웠다는 기록과 말이 빨라 어려웠다는 기록을 바탕으로, 상대도 괜찮다면 카페 주문과 빠른 질문에 대처하는 연습을 제안합니다.",
+   "steps": [
+    "(5분) 각자 카페 주문 상황에서 헷갈렸던 점을 짧게 공유합니다.",
+    "(10분) 한 명은 손님, 한 명은 점원이 되어 '아이스 아메리카노 한 잔 주세요' 같은 표현을 천천히 주문하고 속도를 높여 연습합니다 [S1].",
+    "(10분) 포장 여부를 묻는 상황을 가정해 못 알아들었을 때 쓰는 '천천히 말해 줄래요?' 같은 표현을 연습하고 역할을 바꿉니다 [S1].",
+    "(5분) 이번 활동에서 유용했던 주문 및 되묻기 표현을 정리하고 피드백을 나눕니다."
+   ],
+   "source_ids": [
+    "S1"
+   ],
+   "minutes": 30,
+   "prep": "휴대폰 메뉴판 사진"
+  },
+  "baseline": {
+   "title": "카페 주문 표현과 속도 조절 듣기 연습",
+   "desc": "표현을 배웠다는 기록과 빠른 말 때문에 듣기가 어려웠다는 기록을 바탕으로, 상대도 괜찮다면 천천히 속도를 조절하며 카페 주문 상황을 연습하는 짧은 교류 활동입니다.",
+   "steps": [
+    "(5분) 각자 카페에서 겪은 경험을 바탕으로 주문 표현과 듣기 상황을 설명합니다.",
+    "(10분) 한 명이 손님이 되어 '아이스 아메리카노 한 잔 주세요'를 말하고 다른 한 명은 천천히 직원 역할을 해봅니다.",
+    "(10분) 역할을 바꾸어 포장 여부를 묻는 질문 듣기와 답변을 천천히 연습합니다.",
+    "(5분) 서로의 표현과 속도에 대해 간단한 피드백을 주고받으며 마무리합니다."
+   ],
+   "minutes": 30,
+   "prep": "없음"
+  },
+  "auto": {
+   "retrieval": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 6,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 4,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 2,
+     "total": 4,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 1,
+     "label": "인용한 자료"
+    }
+   },
+   "baseline": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 5,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 4,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 0,
+     "total": 4,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 0,
+     "label": "인용한 자료"
+    }
+   }
+  },
+  "judges": [
+   {
+    "scores": {
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     },
+     "baseline": {
+      "relevance": 4,
+      "feasibility": 5,
+      "specificity": 4,
+      "novelty": 3
+     }
+    },
+    "totals": {
+     "retrieval": 19,
+     "baseline": 16
+    },
+    "winner": "retrieval",
+    "reason": "자료 참고 제안은 빠른 질문 대처와 '천천히 말해 줄래요?' 같은 구체적인 대응법을 단계별로 잘 제시하여 더 실용적입니다.",
+    "order": [
+     "retrieval",
+     "baseline"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   },
+   {
+    "scores": {
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 4,
+      "novelty": 4
+     },
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 5
+     }
+    },
+    "totals": {
+     "baseline": 18,
+     "retrieval": 20
+    },
+    "winner": "retrieval",
+    "reason": "노트의 내용을 충실히 반영하고, 속도를 높이는 연습과 되묻기 표현 추가로 현실성과 신선함이 더 돋보입니다.",
+    "order": [
+     "baseline",
+     "retrieval"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   }
+  ],
+  "winner": "retrieval",
+  "model": "gemini-3.5-flash-lite"
+ },
+ {
+  "scenario": "서로 다른 희망",
+  "notes": [
+   "도자기 공방에 가 보고 싶다.",
+   "돈을 쓰지 않고 학교 안에서 잠깐 이야기하고 싶다."
+  ],
+  "keywords": [
+   "도자기 공방",
+   "학교 산책 대화"
+  ],
+  "topics": [],
+  "providers": {
+   "library": "ok",
+   "wikipedia": "no_topic",
+   "google": "disabled"
+  },
+  "sources": [
+   "만들기 체험 전 미니 준비 만남",
+   "캠퍼스 꿀팁 15분 투어",
+   "도서관 이용법 서로 알려주기"
+  ],
+  "retrieval": {
+   "title": "공방 사진을 보며 대화하고 캠퍼스 장소 소개하기",
+   "desc": "한쪽은 도자기 공방에 가고 싶다는 기록을 남겼고, 다른 한쪽은 돈을 쓰지 않고 학교 안에서 이야기하고 싶다는 기록을 남겼습니다. 상대도 괜찮다면, 비용 없이 학교 안에서 도자기 공방 관련 사진이나 영상을 보며 질문을 나누고, 서로의 장소를 소개해 보는 짧은 만남을 제안합니다.",
+   "steps": [
+    "(5분) 각자 준비해 온 도자기 공방 사진이나 학교 장소를 화면으로 공유하며 오늘 나눌 주제를 확인합니다.",
+    "(10분) 공방 사진을 보며 '어떻게 만드는 거예요?' 같은 질문 표현을 하나씩 연습하고 짧게 대화합니다 [S1].",
+    "(10분) 학교 안의 자주 가는 장소 3곳을 걸으며 관련 표현을 말하고 서로 다른 점을 가볍게 나눕니다 [S2].",
+    "(5분) 오늘 서로 새롭게 알게 된 표현과 소감을 한마디씩 짧게 전하고 마칩니다."
+   ],
+   "source_ids": [
+    "S1",
+    "S2"
+   ],
+   "minutes": 25,
+   "prep": "도자기 공방 사진이나 영상 화면"
+  },
+  "baseline": {
+   "title": "공방 표현 배우기와 학교 안 산책 대화",
+   "desc": "도자기 공방에 가보고 싶다는 기록과 돈 없이 학교 안에서 이야기하고 싶다는 기록을 바탕으로, 상대도 괜찮다면 공방 관련 표현을 나누고 학교 안에서 대화하는 짧은 만남을 제안합니다.",
+   "steps": [
+    "(5분) 각자 준비해 온 공방 관련 표현이나 학교 산책 주제를 정하고 오늘 순서를 간단히 확인합니다.",
+    "(10분) 도자기 공방 경험이 있다면 관련 표현 '물레를 돌리다' 등을 먼저 알려주고 가볍게 연습합니다.",
+    "(10분) 상대도 괜찮다면 돈을 쓰지 않고 학교 안을 걸으며 오늘 나눈 표현을 써서 대화를 이어갑니다.",
+    "(5분) 오늘 활동에서 잘 된 점과 아쉬웠던 점을 짧게 피드백하고 다음 만남을 가볍게 마무리합니다."
+   ],
+   "minutes": 30,
+   "prep": "없음"
+  },
+  "auto": {
+   "retrieval": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 5,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 4,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 2,
+     "total": 4,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 2,
+     "label": "인용한 자료"
+    }
+   },
+   "baseline": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 6,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 4,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 0,
+     "total": 4,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 0,
+     "label": "인용한 자료"
+    }
+   }
+  },
+  "judges": [
+   {
+    "scores": {
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     },
+     "baseline": {
+      "relevance": 4,
+      "feasibility": 4,
+      "specificity": 3,
+      "novelty": 3
+     }
+    },
+    "totals": {
+     "retrieval": 19,
+     "baseline": 14
+    },
+    "winner": "retrieval",
+    "reason": "자료 참고 제안은 공유 노트의 두 요구사항을 구체적인 시간별 단계로 잘 녹여내어 실행 가능성과 명확성이 더 높습니다.",
+    "order": [
+     "retrieval",
+     "baseline"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   },
+   {
+    "scores": {
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 5
+     },
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 5
+     }
+    },
+    "totals": {
+     "baseline": 20,
+     "retrieval": 20
+    },
+    "winner": "tie",
+    "reason": "두 제안 모두 공유 노트의 요구사항을 30분 내에 구체적이고 참신하게 잘 반영하여 우열을 가리기 어렵습니다.",
+    "order": [
+     "baseline",
+     "retrieval"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   }
+  ],
+  "winner": "tie",
+  "model": "gemini-3.5-flash-lite"
+ },
+ {
+  "scenario": "명절 이야기",
+  "notes": [
+   "추석에 송편을 만든다는 걸 처음 알았다.",
+   "'명절 잘 보내세요'라는 인사를 배웠다."
+  ],
+  "keywords": [
+   "송편 만들기",
+   "명절 인사"
+  ],
+  "topics": [
+   "추석",
+   "송편"
+  ],
+  "providers": {
+   "library": "ok",
+   "wikipedia": "ok",
+   "google": "disabled"
+  },
+  "sources": [
+   "명절·기념일 비교 지도",
+   "오늘의 표현 3개 교환",
+   "만들기 체험 전 미니 준비 만남",
+   "추석 (위키백과)",
+   "송편 (위키백과)"
+  ],
+  "retrieval": {
+   "title": "명절 문화와 인사 나누기",
+   "desc": "추석 송편과 인사말을 배운 기록을 바탕으로, 각자 나라의 대표 명절과 인사 표현을 종이에 적어 비교하고 설명하는 짧은 교류 활동입니다.",
+   "steps": [
+    "(5분) 종이를 반으로 나눠 각자 나라의 대표 명절과 인사말을 적고 나란히 비교합니다 [S1].",
+    "(10분) 같은 점과 다른 점을 골라 '명절 잘 보내세요'처럼 서로의 언어로 설명합니다 [S1].",
+    "(10분) 상대가 설명한 내용에 대해 궁금한 점을 묻고 간단한 피드백을 주고받습니다 [S2].",
+    "(5분) 오늘 나눈 명절 이야기 중 기억에 남는 단어를 하나씩 말하며 마무리합니다 [S2]."
+   ],
+   "source_ids": [
+    "S1",
+    "S2"
+   ],
+   "minutes": 30,
+   "prep": "종이와 필기구"
+  },
+  "baseline": {
+   "title": "명절 문화 소개와 인사 나누기 교류",
+   "desc": "추석 송편에 대해 알게 된 기록과 명절 인사 표현을 배운 기록을 바탕으로, 각자의 명절 문화를 짧게 소개하고 관련 인사를 연습하는 20분 교류 활동입니다.",
+   "steps": [
+    "(5분) 각자 알고 있는 대표적인 명절 음식이나 풍경을 한 가지씩 정해 간단히 소개하기",
+    "(10분) '명절 잘 보내세요'처럼 서로의 언어로 된 따뜻한 명절 인사 표현을 골라 한 번씩 따라 해보기",
+    "(5분) 오늘 새롭게 알게 된 명절 문화와 인사에 대해 간단히 소감을 나누고 마무리하기"
+   ],
+   "minutes": 20,
+   "prep": "없음"
+  },
+  "auto": {
+   "retrieval": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 6,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 4,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 4,
+     "total": 4,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 2,
+     "label": "인용한 자료"
+    }
+   },
+   "baseline": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 6,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 3,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 0,
+     "total": 3,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 0,
+     "label": "인용한 자료"
+    }
+   }
+  },
+  "judges": [
+   {
+    "scores": {
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     },
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 4,
+      "novelty": 4
+     }
+    },
+    "totals": {
+     "retrieval": 19,
+     "baseline": 18
+    },
+    "winner": "retrieval",
+    "reason": "자료 참고 제안은 시간대별 활동 순서와 소통 방식이 더 구체적으로 작성되어 있어 현장 적용성이 우수합니다.",
+    "order": [
+     "retrieval",
+     "baseline"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   },
+   {
+    "scores": {
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     },
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 3,
+      "specificity": 4,
+      "novelty": 4
+     }
+    },
+    "totals": {
+     "baseline": 19,
+     "retrieval": 16
+    },
+    "winner": "baseline",
+    "reason": "기록만 쓴 제안은 20분 시간 제약에 가장 적합하며, 단계별로 명확하고 부담 없는 활동 순서를 제시했습니다.",
+    "order": [
+     "baseline",
+     "retrieval"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   }
+  ],
+  "winner": "tie",
+  "model": "gemini-3.5-flash-lite"
+ },
+ {
+  "scenario": "학교생활 적응",
+  "notes": [
+   "도서관 좌석 예약을 앱으로 해야 한다는 걸 알았다.",
+   "교수님께 이메일 보내는 표현을 알고 싶다."
+  ],
+  "keywords": [
+   "도서관 좌석 예약",
+   "이메일 작성"
+  ],
+  "topics": [],
+  "providers": {
+   "library": "ok",
+   "wikipedia": "no_topic",
+   "google": "disabled"
+  },
+  "sources": [
+   "과제 표현·발표 표현 교환",
+   "도서관 이용법 서로 알려주기",
+   "캠퍼스 꿀팁 15분 투어"
+  ],
+  "retrieval": {
+   "title": "도서관 좌석 앱과 교수님 이메일 표현 교환",
+   "desc": "도서관 좌석 예약을 앱으로 해야 한다는 사실을 알았다는 기록과 교수님께 이메일 보내는 표현을 알고 싶다는 기록을 바탕으로 다음 활동을 제안합니다. 상대도 괜찮다면 각자 궁금한 점을 하나씩 알려주는 짧은 만남을 이어가 보세요.",
+   "steps": [
+    "(5분) 도서관 좌석 예약을 앱으로 하는 과정에서 알게 된 점을 나누고, 이어서 교수님께 이메일 보낼 때 쓰는 표현 '교수님, 질문이 있습니다' 같은 문장을 하나씩 살펴봅니다. [S1]",
+    "(10분) 한쪽은 도서관 앱에서 좌석을 예약하는 실제 화면이나 절차를 설명하고, 다른 쪽은 교수님께 보낼 이메일 첫 문장 작성법을 설명합니다. [S1]",
+    "(10분) 상대가 실제로 상황을 가정해 '교수님, 과제 관련해 여쭤봅니다'처럼 한 문장씩 말해 보고, 더 자연스러운 표현으로 피드백을 나눕니다. [S1]"
+   ],
+   "source_ids": [
+    "S1"
+   ],
+   "minutes": 25,
+   "prep": "노트와 필기구, 스마트폰"
+  },
+  "baseline": {
+   "title": "도서관 앱 예약 경험과 교수님께 이메일 쓰는 표현 나누기",
+   "desc": "도서관 좌석 예약을 앱으로 했다는 기록과 교수님께 이메일 보내는 표현을 알고 싶다는 기록을 바탕으로, 서로의 경험과 필요한 표현을 20분 동안 가볍게 주고받는 다음 만남을 제안합니다.",
+   "steps": [
+    "(5분) 도서관 좌석 예약을 앱으로 했던 경험과 앱 사용 시 유용했던 단어를 서로 간단히 소개합니다.",
+    "(10분) 교수님께 이메일 보내는 표현을 알고 싶다는 기록을 바탕으로, '교수님, 문의드릴 사항이 있어 연락드립니다' 같은 정중한 표현을 함께 읽어보고 연습합니다.",
+    "(5분) 새로 알게 된 이메일 표현이나 예약 경험에 대해 간단히 피드백을 주고받으며 마무리합니다."
+   ],
+   "minutes": 20,
+   "prep": "없음"
+  },
+  "auto": {
+   "retrieval": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 5,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 3,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 3,
+     "total": 3,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 1,
+     "label": "인용한 자료"
+    }
+   },
+   "baseline": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 5,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 3,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 0,
+     "total": 3,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 0,
+     "label": "인용한 자료"
+    }
+   }
+  },
+  "judges": [
+   {
+    "scores": {
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     },
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 4,
+      "novelty": 3
+     }
+    },
+    "totals": {
+     "retrieval": 19,
+     "baseline": 17
+    },
+    "winner": "retrieval",
+    "reason": "자료 참고 제안은 이메일 작성 연습 과정을 상황 가정과 피드백으로 구체화하여 실질적인 언어 교류가 가능하도록 설계되었습니다.",
+    "order": [
+     "retrieval",
+     "baseline"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.1-flash-lite"
+   },
+   {
+    "scores": {
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 3
+     },
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 4,
+      "specificity": 4,
+      "novelty": 3
+     }
+    },
+    "totals": {
+     "baseline": 18,
+     "retrieval": 16
+    },
+    "winner": "baseline",
+    "reason": "1번 제안은 시간 배분이 명확하고, 참여자가 무엇을 해야 할지 단계별로 구체적으로 제시되어 있어 20분 안에 효율적으로 수행하기 적합합니다.",
+    "order": [
+     "baseline",
+     "retrieval"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.1-flash-lite"
+   }
+  ],
+  "winner": "tie",
+  "model": "gemini-3.5-flash-lite"
+ },
+ {
+  "scenario": "K-POP 관심",
+  "notes": [
+   "노래 가사에 나온 '설레다'라는 말을 배웠다.",
+   "좋아하는 노래 가사를 서로 설명해 보고 싶다."
+  ],
+  "keywords": [
+   "노래 가사 설명",
+   "가사 의미 이야기하기"
+  ],
+  "topics": [],
+  "providers": {
+   "library": "ok",
+   "wikipedia": "no_topic",
+   "google": "disabled"
+  },
+  "sources": [
+   "노래 가사 한 소절 풀이"
+  ],
+  "retrieval": {
+   "title": "노래 가사 속 표현을 나누는 짧은 교류",
+   "desc": "표현을 배웠다는 기록과 가사를 설명해 보고 싶다는 기록을 바탕으로, 서로의 노래 한 소절을 짚어보고 감정을 나누는 20분 교류 활동을 제안합니다.",
+   "steps": [
+    "(5분) 각자 좋아하는 노래에서 한 소절을 고른다. 예를 들어 '마음이 설레다'처럼 가사의 의미를 간단히 적어둔다 [S1].",
+    "(10분) 각자 골라온 가사의 뜻을 설명하고, 상대는 그 소절을 따라 읽거나 불러 본다 [S1].",
+    "(5분) 비슷한 감정을 표현하는 자기 나라 노래를 하나씩 가볍게 소개하고 서로 피드백을 주고받는다 [S1]."
+   ],
+   "source_ids": [
+    "S1"
+   ],
+   "minutes": 20,
+   "prep": "좋아하는 노래 가사 한 소절"
+  },
+  "baseline": {
+   "title": "좋아하는 노래 가사 의미를 하나씩 소개해 주는 짧은 교류",
+   "desc": "노래 가사에 나온 표현을 배웠다는 기록과 좋아하는 노래 가사를 서로 설명해 보고 싶다는 기록을 바탕으로, 상대도 괜찮다면 각자 좋아하는 가사의 한 줄 의미를 소개해 주는 20분 교류 활동을 제안합니다.",
+   "steps": [
+    "(5분) 각자 준비한 노래 가사 한 줄을 화면에 띄우고 읽어주기",
+    "(10분) 가사 속 표현과 의미를 '설레다'처럼 간단히 설명하기",
+    "(5분) 서로의 설명에 대해 간단히 소감을 말하고 피드백 주고받기"
+   ],
+   "minutes": 20,
+   "prep": "좋아하는 노래 가사 한 줄 메모"
+  },
+  "auto": {
+   "retrieval": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 5,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 3,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 3,
+     "total": 3,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 1,
+     "label": "인용한 자료"
+    }
+   },
+   "baseline": {
+    "note_coverage": {
+     "value": 2,
+     "total": 2,
+     "label": "공유 기록 반영"
+    },
+    "concrete_details": {
+     "value": 5,
+     "label": "구체적 요소(시간·횟수·예시 표현)"
+    },
+    "steps": {
+     "value": 3,
+     "label": "실행 단계"
+    },
+    "source_support": {
+     "value": 0,
+     "total": 3,
+     "label": "자료로 뒷받침된 단계"
+    },
+    "cited_sources": {
+     "value": 0,
+     "label": "인용한 자료"
+    }
+   }
+  },
+  "judges": [
+   {
+    "scores": {
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     },
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 4,
+      "novelty": 3
+     }
+    },
+    "totals": {
+     "retrieval": 19,
+     "baseline": 17
+    },
+    "winner": "retrieval",
+    "reason": "자료 참고 제안은 노래 한 소절을 따라 부르고 자국 노래를 소개하는 추가 상호작용 요소가 포함되어 있어 더 구체적이고 흥미롭습니다.",
+    "order": [
+     "retrieval",
+     "baseline"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   },
+   {
+    "scores": {
+     "baseline": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     },
+     "retrieval": {
+      "relevance": 5,
+      "feasibility": 5,
+      "specificity": 5,
+      "novelty": 4
+     }
+    },
+    "totals": {
+     "baseline": 19,
+     "retrieval": 19
+    },
+    "winner": "retrieval",
+    "reason": "두 제안 모두 훌륭하나, 자료 참고 제안는 따라 읽기와 유사 감정 소개 등 상호작용 요소가 더 구체적이고 흥미롭습니다.",
+    "order": [
+     "baseline",
+     "retrieval"
+    ],
+    "criteria": {
+     "relevance": "노트 내용과의 관련성",
+     "feasibility": "실제로 해보기 쉬움",
+     "specificity": "구체성",
+     "novelty": "새로움(지난 활동과의 차별성)"
+    },
+    "model": "gemini-3.5-flash-lite"
+   }
+  ],
+  "winner": "retrieval",
+  "model": "gemini-3.5-flash-lite"
+ }
+]
