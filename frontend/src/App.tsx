@@ -174,12 +174,12 @@ export default function App() {
             {tab === "profile" && <ProfilePage me={me} opts={opts} flash={flash} onSaved={async () => { await reload(); setTab("rec"); }} />}
             {tab === "rec" && <RecommendPage me={me} opts={opts} matches={matches} onChanged={reload} onOpenChat={openChat} flash={flash} />}
             {tab === "chat" && (inRoom && active ? (
-              <ChatPage me={me} active={active} onBack={() => setInRoom(false)} onChanged={reload} flash={flash} />
+              <ChatPage me={me} active={active} onBack={() => setInRoom(false)} onChanged={reload} flash={flash} goNote={() => setTab("note")} />
             ) : (
               <ChatListPage me={me} rooms={rooms} onOpen={openChat} goRec={() => setTab("rec")} />
             ))}
             {tab === "brief" && <BriefPage active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} goNote={() => setTab("note")} flash={flash} />}
-            {tab === "note" && <NotesPage active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} flash={flash} />}
+            {tab === "note" && <NotesPage developerMode={Boolean(opts?.dev_mode)} active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} goChat={openChat} flash={flash} />}
           </>
         )}
       </main>

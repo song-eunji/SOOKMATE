@@ -137,3 +137,18 @@ def test_reason_only_uses_real_overlap(db):
     ex2 = matching.explain(d, i)
     assert "관심사" not in ex2["reason"] and "시간" not in ex2["reason"]
     assert week_of()
+
+
+def test_similar_pairs_shows_close_but_not_identical_interests():
+    pairs = matching.similar_pairs(["한국어 표현", "카페"], ["한국어", "카페"])
+    assert pairs == [{"mine": "한국어 표현", "theirs": "한국어"}]
+    assert matching.similar_pairs(["영화"], ["러닝"]) == []
+
+
+def test_reason_mentions_similar_interests(db):
+    d, i = db.get(User, 1), db.get(User, 27)
+    d.interests, i.interests = ["한국어 표현"], ["한국어"]
+    d.times, d.teach, d.learn = [], [], []
+    ex = matching.explain(d, i)
+    assert ex["common_interests"] == []
+    assert "한국어 표현(한국어)" in ex["reason"]

@@ -77,6 +77,7 @@ const D: Record<string, Tr> = {
   "새 추천이 생겼어요": ["New matches found", "新しいおすすめが届きました", "有新的推荐", "Có gợi ý mới"],
   "아직 새 후보가 없어요": ["No new candidates yet", "まだ新しい候補はいません", "暂时没有新的候选人", "Chưa có ứng viên mới"],
   "추천 이유": ["Why we picked them", "おすすめの理由", "推荐理由", "Lý do gợi ý"],
+  "글자는 달라도 뜻이 가까운 관심사예요": ["Different words, similar meaning", "言葉は違っても意味が近い関心事です", "文字不同但意思相近的兴趣", "Khác từ nhưng nghĩa gần nhau"],
   "겹치는 항목이 없어요": ["Nothing in common yet", "共通の項目はありません", "没有重合的项目", "Chưa có điểm chung"],
   "내가 알려줄 것": ["What I can teach", "私が教えられること", "我能教的", "Mình có thể chỉ"],
   "{name}님이 알려줄 것": ["What {name} can teach", "{name}さんが教えられること", "{name}能教的", "{name} có thể chỉ"],

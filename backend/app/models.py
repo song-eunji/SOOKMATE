@@ -109,3 +109,21 @@ class Note(Base):
     share_next: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class ActivityRun(Base):
+    __tablename__ = "activity_runs"
+    __table_args__ = {"sqlite_autoincrement": True}
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    ratings: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AIQuota(Base):
+    __tablename__ = "ai_quota"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    blocked_until: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(40))

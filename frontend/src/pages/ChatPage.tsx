@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { api, wsUrl } from "../api";
+import { api, loadActivity, wsUrl } from "../api";
+import { ActivityBody, proposalText } from "./ActivityResults";
 import { Avatar } from "../components";
 import { useI18n } from "../i18n";
-import type { ChatMessage, MatchView, Me } from "../types";
+import type { ChatMessage, MatchView, Me, SavedActivity } from "../types";
 
 interface Props {
   me: Me;
@@ -10,6 +11,7 @@ interface Props {
   onBack: () => void;
   onChanged: () => Promise<void>;
   flash: (msg: string) => void;
+  goNote: () => void;
 }
 
 // 빠른 답장은 보내는 사람의 화면 언어로 나간다
@@ -21,7 +23,48 @@ type WsEvent =
   | ({ type: "message" } & ChatMessage)
   | { type: "read"; reader_id: number; last_read_id: number };
 
-export default function ChatPage({ me, active, onBack, onChanged, flash }: Props) {
+/** 대화방 위에 고정되는 '다음 활동 추천' 카드. 노트 탭에 가지 않아도 추천을 보고 바로 제안할 수 있다. */
+function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number; partnerName: string; onSend: (text: string) => Promise<boolean>; goNote: () => void }) {
+  const [stored, setStored] = useState<SavedActivity | null | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+  const [sent, setSent] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setStored(undefined); setOpen(false); setSent(false);
+    const load = () => loadActivity(matchId).then((r) => { if (alive) setStored(r); }).catch(() => { if (alive) setStored(null); });
+    load();
+    // 노트 탭이나 다른 창에서 새로 추천받았을 수 있어 돌아올 때마다 다시 읽는다.
+    window.addEventListener("focus", load);
+    return () => { alive = false; window.removeEventListener("focus", load); };
+  }, [matchId]);
+  if (stored === undefined) return null;
+  if (!stored) return (
+    <div className="chat-pin empty">
+      <span>📌 아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.</span>
+      <button className="link" onClick={goNote}>노트 쓰러 가기 →</button>
+    </div>
+  );
+  const act = stored.retrieval;
+  return (
+    <section className={`chat-pin${open ? " open" : ""}`} aria-label="다음 활동 추천">
+      <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span><small>📌 다음 활동 추천</small><b>{act.title}</b></span>
+        <span className="chat-pin-toggle" aria-hidden="true">{open ? "접기 ▲" : "펼치기 ▼"}</span>
+      </button>
+      {open && (
+        <div className="chat-pin-body">
+          <ActivityBody activity={act} />
+          <button className="btn" disabled={sent} onClick={async () => { if (await onSend(proposalText(act))) setSent(true); }}>
+            {sent ? "채팅에 제안을 보냈어요 ✓" : `💬 ${partnerName}님에게 이 활동 제안하기`}
+          </button>
+          <button className="link" onClick={goNote}>노트에서 다른 추천 받기 · 근거 자료 보기 →</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function ChatPage({ me, active, onBack, onChanged, flash, goNote }: Props) {
   const { t, clock } = useI18n();
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -70,7 +113,7 @@ export default function ChatPage({ me, active, onBack, onChanged, flash }: Props
 
   const send = async (text: string) => {
     const msg = text.trim();
-    if (!msg) return;
+    if (!msg) return false;
     setDraft("");
     try {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -79,8 +122,10 @@ export default function ChatPage({ me, active, onBack, onChanged, flash }: Props
         const m = await api.sendMessage(active.id, msg);
         setMsgs((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
       }
+      return true;
     } catch (e) {
       flash((e as Error).message);
+      return false;
     }
   };
 
@@ -139,6 +184,8 @@ export default function ChatPage({ me, active, onBack, onChanged, flash }: Props
           </button>
         </div>
       )}
+
+      <ActivityPin matchId={matchId} partnerName={partner.name} onSend={send} goNote={goNote} />
 
       <div className="log">
         <div className="msg sys">{t("양쪽이 수락해서 대화방이 열렸어요. 시간과 장소를 정해 보세요.")}</div>

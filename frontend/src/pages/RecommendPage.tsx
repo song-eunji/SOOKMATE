@@ -107,12 +107,17 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
                       {tv(v)}
                     </span>
                   ))}
+                  {(e.similar_interests ?? []).map((s) => (
+                    <span className="tag" key={`${s.mine}-${s.theirs}`} title={t("글자는 달라도 뜻이 가까운 관심사예요")}>
+                      {tv(s.mine)} ≈ {tv(s.theirs)}
+                    </span>
+                  ))}
                   {e.common_times.map((v) => (
                     <span className="tag neutral" key={v}>
                       {tv(v)}
                     </span>
                   ))}
-                  {e.common_interests.length + e.common_times.length === 0 && <span className="hint">{t("겹치는 항목이 없어요")}</span>}
+                  {e.common_interests.length + (e.similar_interests?.length ?? 0) + e.common_times.length === 0 && <span className="hint">{t("겹치는 항목이 없어요")}</span>}
                 </div>
               </div>
 
