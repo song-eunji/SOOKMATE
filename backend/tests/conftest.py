@@ -9,6 +9,9 @@ os.environ.pop("ANTHROPIC_API_KEY", None)  # 테스트는 외부 AI 호출 금�
 os.environ.pop("GEMINI_API_KEY", None)
 os.environ.pop("TAVILY_API_KEY", None)
 os.environ["LLM_PROVIDER"] = "auto"
+os.environ["ACTIVITY_WIKIPEDIA"] = "0"  # 테스트는 외부 검색 금지 (필요한 테스트만 가짜 응답으로 켬)
+os.environ["ACTIVITY_GOOGLE_SEARCH"] = "0"
+os.environ.pop("GEMINI_FALLBACK_MODELS", None)
 
 import pytest
 from fastapi.testclient import TestClient

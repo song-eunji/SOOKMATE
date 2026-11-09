@@ -11,18 +11,20 @@ def test_private_fields_never_reach_generation(client, monkeypatch):
     })
     captured = []
     from app import activity_store
-    monkeypatch.setattr(activity_store, "run", lambda db, mid, uid, ex, notes, compare: captured.extend(notes) or {"ok": True})
+    monkeypatch.setattr(activity_store, "run", lambda db, mid, uid, ex, notes, compare, **kw: captured.extend(notes) or {"ok": True})
     response = client.post(path + "/next-activity?compare=true", headers=h(1))
     assert response.status_code == 200
     assert captured == ["공유 희망", "공유 사실"]
     assert client.post(path + "/next-activity", headers=h(5)).status_code == 404
 
 
-def test_unconfigured_is_not_claimed_as_rag(monkeypatch):
+def test_unconfigured_llm_still_finds_library_sources_but_is_not_comparable(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    result = activity.recommend({"common_interests": ["카페"]}, ["카페"], compare=True)
-    assert result["retrieval"]["search_status"] == "not_configured"
-    assert result["retrieval"]["sources"] == []
+    monkeypatch.setenv("ACTIVITY_WIKIPEDIA", "0")
+    result = activity.recommend({"common_interests": ["카페"]}, ["카페 주문"], compare=True)
+    assert result["retrieval"]["retrieved_sources"]  # 자료집 검색은 키 없이도 동작
+    assert result["retrieval"]["generation_mode"] == "fallback"
+    assert result["retrieval"]["sources"] == []  # 생성이 안 됐으면 인용도 없다
     assert not result["comparable"]
 
 
@@ -39,8 +41,8 @@ def test_fabricated_citation_falls_back(monkeypatch):
 
 
 def test_comparison_uses_same_notes_and_separate_sources(monkeypatch):
-    source = {"id": "S1", "title": "자료", "url": "https://example.com", "text": "자료 내용"}
-    monkeypatch.setattr(activity, "search", lambda query: {"sources": [source], "status": "ok", "provider": "google_search"})
+    source = {"id": "S1", "title": "자료", "url": "", "text": "자료 내용", "provider": "library"}
+    monkeypatch.setattr(activity, "search_sources", lambda analysis, notes: {"sources": [source], "status": "ok", "provider": "library", "providers": {}})
     inputs = []
     def llm(system, user):
         import json
@@ -48,8 +50,8 @@ def test_comparison_uses_same_notes_and_separate_sources(monkeypatch):
         if "entries" in data:
             return None
         inputs.append(data)
-        return {"title": "활동", "desc": "설명", "reason": "이유", "steps": ["하나", "둘", "셋"],
-                "source_ids": ["S1"] if data["sources"] else []}
+        return {"title": "활동", "desc": "설명", "reason": "이유", "steps": ["하나 [S1]", "둘", "셋"],
+                "minutes": 20, "prep": "없음", "source_ids": ["S1"] if data["sources"] else []}
     monkeypatch.setattr(activity.ai, "llm_json", llm)
     result = activity.recommend({"common_interests": ["카페"]}, ["함께 카페"], compare=True)
     assert result["comparable"]
@@ -57,12 +59,13 @@ def test_comparison_uses_same_notes_and_separate_sources(monkeypatch):
     assert inputs[0]["sources"] and inputs[1]["sources"] == []
     assert inputs[0]["note_analysis"] == inputs[1]["note_analysis"]
     assert result["baseline"]["sources"] == []
+    assert result["retrieval"]["minutes"] == 20
 
 
-def test_search_failure_preserves_baseline(monkeypatch):
-    monkeypatch.setattr(activity, "search", lambda query: {"sources": [], "status": "failed", "provider": "google_search"})
+def test_search_with_no_sources_still_produces_baseline(monkeypatch):
+    monkeypatch.setattr(activity, "search_sources", lambda analysis, notes: {"sources": [], "status": "empty", "provider": "none", "providers": {}})
     result = activity.recommend({"common_interests": ["전시"]}, ["전시"], compare=True)
-    assert result["retrieval"]["search_status"] == "failed"
+    assert result["retrieval"]["search_status"] == "empty"
     assert result["baseline"]["title"]
     assert not result["comparable"]
 
@@ -91,7 +94,7 @@ def test_analysis_keeps_author_and_field(monkeypatch):
 
 def test_no_notes_do_not_trigger_analysis_or_search(monkeypatch):
     monkeypatch.setattr(activity.ai, "llm_json", lambda *args: None)
-    monkeypatch.setattr(activity, "search", lambda query: (_ for _ in ()).throw(AssertionError("unexpected search")))
+    monkeypatch.setattr(activity, "search_sources", lambda *a: (_ for _ in ()).throw(AssertionError("unexpected search")))
     result = activity.recommend({"common_interests": []}, [])
     assert result["search_status"] == "no_query"
     assert result["analysis"]["entries"] == []

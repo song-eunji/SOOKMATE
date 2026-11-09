@@ -8,9 +8,9 @@ def setup_run(client, monkeypatch):
     path = f"/api/matches/{m['id']}"
     client.put(path + "/notes", headers=h(1), json={"next_text": "도자기", "share_next": True})
     calls = []
-    monkeypatch.setattr(store, "analyze", lambda ex, notes: {"query": "도자기", "entries": ex["shared_entries"], "mode": "llm", "signals": [], "keywords": ["도자기"]})
+    monkeypatch.setattr(store, "analyze", lambda ex, notes: {"query": "도자기", "entries": ex["shared_entries"], "mode": "llm", "signals": [], "keywords": ["도자기"], "topics": []})
     monkeypatch.setattr(store.ai, "llm_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(store, "search", lambda query: {"sources": [{"id": "S1", "title": "자료", "url": "https://example.com", "text": "자료"}], "status": "ok", "provider": "google_search"})
+    monkeypatch.setattr(store, "search_sources", lambda analysis, notes: {"sources": [{"id": "S1", "title": "자료", "url": "", "text": "자료", "provider": "library"}], "status": "ok", "provider": "library", "providers": {"library": "ok"}})
     def generate(ex, notes, sources, analysis):
         calls.append(bool(sources))
         return {"title": "도자기 만들기", "desc": "설명", "basis": "shared_notes", "reason": "공유 희망", "steps": ["하나", "둘", "셋"], "sources": sources, "source_ids": ["S1"] if sources else [], "generation_mode": "llm", "generation_ms": 1, "llm_status": {"status": "ok"}}
@@ -50,21 +50,29 @@ def test_missing_shared_notes_and_outsiders_rejected(client, monkeypatch):
     assert client.post(path + "/next-activity", headers=h(1)).status_code == 422
 
 
-def test_search_disabled_does_not_call_provider(client, monkeypatch):
+def test_comparison_stores_evaluation_and_regenerate_replaces_run(client, monkeypatch):
+    _, path, calls = setup_run(client, monkeypatch)
+    both = client.post(path + "/next-activity?compare=true", headers=h(1)).json()
+    assert set(both["evaluation"]["auto"]) == {"retrieval", "baseline"}
+    assert both["evaluation"]["judge"] is None  # 테스트에는 키가 없어 심사는 건너뛰지만 비교는 유지된다
+    again = client.post(path + "/next-activity?regenerate=true", headers=h(1)).json()
+    assert again["run_id"] != both["run_id"] and "baseline" not in again
+    assert calls == [True, False, True]
+
+
+def test_search_disabled_generates_without_sources(client, monkeypatch):
     _, path, _ = setup_run(client, monkeypatch)
     monkeypatch.setenv("ACTIVITY_SEARCH_ENABLED", "0")
-    monkeypatch.setattr(store, "search", lambda query: (_ for _ in ()).throw(AssertionError("search must be off")))
+    from app import activity_search
+    monkeypatch.setattr(store, "search_sources", activity_search.search_sources)
     result = client.post(path + "/next-activity?compare=true", headers=h(1)).json()
     assert result["retrieval"]["search_status"] == "disabled"
     assert not result["comparable"]
     assert result["retrieval"]["sources"] == []
 
 
-def test_search_failure_is_not_silently_saved_as_grounded(client, monkeypatch):
-    _, path, calls = setup_run(client, monkeypatch)
-    monkeypatch.setenv("ACTIVITY_SEARCH_ENABLED", "1")
-    monkeypatch.setattr(store, "search", lambda query: {"sources": [], "status": "failed", "provider": "google_search"})
-    response = client.post(path + "/next-activity", headers=h(1))
-    assert response.status_code == 503
-    assert calls == []
+def test_generation_failure_is_not_saved(client, monkeypatch):
+    _, path, _ = setup_run(client, monkeypatch)
+    monkeypatch.setattr(store, "generate", lambda *a: {"generation_mode": "fallback", "llm_status": {"status": "timeout"}, "sources": []})
+    assert client.post(path + "/next-activity", headers=h(1)).status_code == 503
     assert client.get(path + "/activity-result", headers=h(1)).json() is None

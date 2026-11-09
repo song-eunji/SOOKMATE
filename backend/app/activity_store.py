@@ -1,4 +1,7 @@
-"""Persistent, input-versioned results. One process serializes generation per match."""
+"""Persistent, input-versioned results. One process serializes generation per match.
+
+흐름: 공유 노트 분석 → 자료 검색(자료집·위키백과·선택적 Google) → 활동 생성 → (비교 시) 검색 없는 생성 + 평가.
+"""
 import hashlib
 import json
 import os
@@ -9,15 +12,19 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from . import ai
+from .activity_eval import RUBRIC, evaluate
 from .models import ActivityRun, AIQuota
-from .next_activity import analyze, generate, search
+from .next_activity import analyze, generate
+from .activity_search import search_sources
 
 _lock = threading.Lock()
 
 
 def fingerprint(ex):
     return hashlib.sha256(json.dumps({"entries": ex["shared_entries"], "interests": sorted(ex["common_interests"]),
-        "llm": ai.llm_config(), "search_model": os.getenv("GEMINI_SEARCH_MODEL"), "search_enabled": os.getenv("ACTIVITY_SEARCH_ENABLED", "1"), "version": 2}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        "llm": ai.llm_config(), "fallbacks": os.getenv("GEMINI_FALLBACK_MODELS", ""),
+        "search": [os.getenv(k, d) for k, d in (("ACTIVITY_SEARCH_ENABLED", "1"), ("ACTIVITY_WIKIPEDIA", "1"), ("ACTIVITY_GOOGLE_SEARCH", "0"))],
+        "version": 3}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 def current(db, mid, ex):
@@ -34,70 +41,67 @@ def view(row, user_id, cached=True):
             "ratings": row.ratings.get(str(user_id), {})}
 
 
-def quota_key(model):
-    return hashlib.sha256((os.getenv("GEMINI_API_KEY", "") + model).encode()).hexdigest()
+def quota_key():
+    return hashlib.sha256((os.getenv("GEMINI_API_KEY", "") + "|".join(ai.llm_models())).encode()).hexdigest()
 
 
-def check_quota(db, model):
-    row = db.get(AIQuota, quota_key(model))
+def check_quota(db):
+    row = db.get(AIQuota, quota_key())
     if row and row.blocked_until > time.time():
-        raise HTTPException(429, {"status": row.status, "retry_after_seconds": int(row.blocked_until-time.time()),
-                                 "message": "AI 호출 한도가 남아 있지 않습니다. 저장된 결과는 계속 볼 수 있습니다."})
+        raise HTTPException(429, {"status": row.status, "retry_after_seconds": int(row.blocked_until - time.time()),
+                                 "message": "무료 AI 호출 한도를 모두 사용했어요. 저장된 결과는 계속 볼 수 있고, 한도가 초기화되면 다시 만들 수 있어요."})
 
 
-def record_quota(db, status, model):
+def record_quota(db, status):
+    """모든 무료 모델이 한도에 걸렸을 때만 막는다(마지막으로 시도한 모델의 상태가 남는다)."""
     if status.get("status") not in ("daily_quota_exhausted", "minute_quota_exhausted", "rate_limited"):
         return
-    delay = status.get("retry_after_seconds") or (86400 if status["status"] == "daily_quota_exhausted" else 60)
-    db.merge(AIQuota(key=quota_key(model), status=status["status"], blocked_until=time.time()+delay))
+    delay = status.get("retry_after_seconds") or (3600 if status["status"] == "daily_quota_exhausted" else 60)
+    db.merge(AIQuota(key=quota_key(), status=status["status"], blocked_until=time.time() + delay))
     db.commit()
-    check_quota(db, model)
+    check_quota(db)
 
 
-def run(db, mid, user_id, ex, notes, compare):
+def run(db, mid, user_id, ex, notes, compare, regenerate=False):
     if not _lock.acquire(blocking=False):
-        raise HTTPException(409, "다른 추천을 생성 중입니다. 잠시 후 다시 확인해 주세요.")
+        raise HTTPException(409, "다른 추천을 만드는 중이에요. 잠시 후 다시 확인해 주세요.")
     try:
         row = current(db, mid, ex)
+        if row and regenerate:
+            db.delete(row)
+            db.commit()
+            row = None
         if row and (not compare or "baseline" in row.payload):
             return view(row, user_id)
-        model = ai.llm_config()["model"]
         if row:
             result = row.payload["retrieval"]
             analysis = result["analysis"]
         else:
-            check_quota(db, model)
+            check_quota(db)
+            started = time.perf_counter()
             analysis = analyze(ex, notes)
-            if notes:
-                record_quota(db, ai.llm_status(), model)
-            search_model = os.getenv("GEMINI_SEARCH_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-            search_enabled = os.getenv("ACTIVITY_SEARCH_ENABLED", "1") != "0"
-            if search_enabled and analysis["query"]:
-                check_quota(db, search_model)
-                found = search(analysis["query"])
-            else:
-                found = {"sources": [], "status": "disabled" if not search_enabled else "no_query", "provider": "google_search"}
-            record_quota(db, found, search_model)
-            if search_enabled and found["status"] != "ok":
-                raise HTTPException(503, "참고 자료를 검색하지 못했습니다. 검색 기반 추천은 생성하지 않았습니다. 잠시 후 다시 시도해 주세요.")
-            check_quota(db, model)
+            record_quota(db, ai.llm_status())
+            found = search_sources(analysis, notes)
             result = generate(ex, notes, found["sources"], analysis)
-            record_quota(db, result["llm_status"], model)
-            result.update(analysis=analysis, search_status=found["status"], search_provider=found["provider"], search_model=found.get("model"),
-                          query=analysis["query"], retrieved_sources=found["sources"], grounding=found.get("grounding"))
+            record_quota(db, result["llm_status"])
             if result["generation_mode"] != "llm":
-                raise HTTPException(503, "AI 추천 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.")
+                raise HTTPException(503, "AI가 활동을 만들지 못했어요. 잠시 후 다시 시도해 주세요.")
+            result.update(analysis=analysis, search_status=found["status"], search_provider=found["provider"],
+                          search_providers=found["providers"], query=analysis["query"],
+                          retrieved_sources=found["sources"], grounding=found.get("grounding"),
+                          total_ms=round((time.perf_counter() - started) * 1000))
             row = ActivityRun(match_id=mid, fingerprint=fingerprint(ex), payload={"retrieval": result}, ratings={})
             db.add(row)
             db.commit()
         if compare:
-            check_quota(db, model)
+            check_quota(db)
             baseline = generate(ex, notes, [], analysis)
-            record_quota(db, baseline["llm_status"], model)
+            record_quota(db, baseline["llm_status"])
             if baseline["generation_mode"] != "llm":
-                raise HTTPException(503, "검색 없는 추천 생성에 실패했습니다. 검색 기반 추천은 저장되어 있습니다.")
-            row.payload = {**row.payload, "baseline": baseline,
-                "comparable": bool(result["sources"]), "rubric": ["노트 관심사와의 관련성", "실행 가능성", "이전 활동과의 차별성", "근거의 충실성"]}
+                raise HTTPException(503, "검색 없는 추천을 만들지 못했어요. 먼저 만든 추천은 그대로 저장되어 있어요.")
+            evaluation = evaluate(notes, analysis, result, baseline, seed=row.id)
+            row.payload = {**row.payload, "baseline": baseline, "evaluation": evaluation,
+                           "comparable": bool(result.get("sources")), "rubric": RUBRIC}
             db.commit()
         return view(row, user_id, cached=False)
     finally:

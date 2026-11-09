@@ -517,12 +517,12 @@ def activity_result(match_id: int, me: User = Depends(me_dep), db: Session = Dep
 
 
 @app.post("/api/matches/{match_id}/next-activity")
-def generate_next_activity(match_id: int, compare: bool = False, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+def generate_next_activity(match_id: int, compare: bool = False, regenerate: bool = False, me: User = Depends(me_dep), db: Session = Depends(get_db)):
     from .activity_store import run, fingerprint, current
     ex, shared = _shared_activity_context(db, match_id, me)
     if not shared:
         raise HTTPException(422, "추천에 사용할 공유 노트를 먼저 저장해 주세요.")
-    response = run(db, match_id, me.id, ex, shared, compare)
+    response = run(db, match_id, me.id, ex, shared, compare, regenerate=regenerate)
     db.expire_all()
     latest, _ = _shared_activity_context(db, match_id, me)
     if fingerprint(latest) != fingerprint(ex):
