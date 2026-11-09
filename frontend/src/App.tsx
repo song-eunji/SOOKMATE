@@ -154,7 +154,7 @@ export default function App() {
               <ChatListPage me={me} rooms={rooms} onOpen={openChat} goRec={() => setTab("rec")} />
             ))}
             {tab === "brief" && <BriefPage active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} goNote={() => setTab("note")} flash={flash} />}
-            {tab === "note" && <NotesPage active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} flash={flash} />}
+            {tab === "note" && <NotesPage developerMode={Boolean(opts?.dev_mode)} active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} flash={flash} />}
           </>
         )}
       </main>

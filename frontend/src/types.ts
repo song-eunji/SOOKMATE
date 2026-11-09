@@ -169,3 +169,14 @@ export interface NoteAnalysis {
   keywords: string[];
   query: string;
 }
+
+export interface SavedActivity {
+  run_id: number;
+  cached: boolean;
+  created_at: string;
+  ratings: Record<string, number>;
+  retrieval: GeneratedActivity;
+  baseline?: GeneratedActivity;
+  comparable?: boolean;
+  rubric?: string[];
+}

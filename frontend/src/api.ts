@@ -45,7 +45,7 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
     let msg = res.statusText;
     try {
       const body = await res.json();
-      msg = typeof body.detail === "string" ? body.detail : "요청을 처리하지 못했어요.";
+      msg = typeof body.detail === "string" ? body.detail : body.detail?.message ?? "요청을 처리하지 못했어요.";
     } catch {
       /* 본문이 JSON 이 아니면 statusText 사용 */
     }
@@ -90,10 +90,13 @@ export function wsUrl(matchId: number): string {
   return `${proto}://${location.host}/ws/matches/${matchId}?user_id=${getUserId()}`;
 }
 
-export const compareActivities = (id: number) => req<import("./types").ActivityComparison>(
+export const compareActivities = (id: number) => req<import("./types").SavedActivity>(
   `/matches/${id}/next-activity?compare=true`, { method: "POST" },
 );
 
-export const generateActivity = (id: number) => req<import("./types").GeneratedActivity>(
+export const generateActivity = (id: number) => req<import("./types").SavedActivity>(
   `/matches/${id}/next-activity`, { method: "POST" },
 );
+
+export const loadActivity = (id: number) => req<import("./types").SavedActivity | null>(`/matches/${id}/activity-result`);
+export const saveActivityRatings = (id: number, run_id: number, ratings: Record<string, number>) => req<{ok: boolean}>(`/matches/${id}/activity-ratings`, {method: "PUT", body: JSON.stringify({run_id, ratings})});
