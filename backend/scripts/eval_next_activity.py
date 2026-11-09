@@ -7,7 +7,9 @@
 모델 호출: 시나리오당 최대 5회(분석 1 + 생성 2 + 심사 2).
 """
 import argparse
+import csv
 import json
+import random
 import sys
 import time
 from datetime import date
@@ -46,7 +48,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=len(SCENARIOS))
     parser.add_argument("--pause", type=float, default=4.0, help="분당 한도 보호용 대기(초)")
+    parser.add_argument("--score-human", action="store_true", help="채운 human_ratings.csv 를 정답표로 풀어 집계(모델 호출 없음)")
     args = parser.parse_args()
+    if args.score_human:
+        print(score_human())
+        return
     rows = []
     for label, notes_spec in SCENARIOS[: args.limit]:
         entries = [{"id": f"N{i + 1}", "participant": who, "field": field, "text": text}
@@ -80,7 +86,59 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     (out / "next_activity_eval.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
     (out / "next_activity_eval.md").write_text(report(rows), encoding="utf-8")
+    write_human_sheet(rows, out)
     print(report(rows))
+
+
+# ---------------------------------------------------------------- 사람 블라인드 평가
+CRIT = ["관련성", "해보기쉬움", "구체성", "새로움"]
+
+
+def write_human_sheet(rows, out):
+    """두 제안을 X/Y로 섞은 평가지(md)와 빈 점수표(csv). 어느 쪽이 자료를 썼는지는 human_key.json 에만 있다."""
+    rng, key, lines = random.Random(), {}, ["# 다음 활동 추천 블라인드 평가지", "",
+        "각 시나리오의 X, Y 제안을 읽고 `human_ratings.csv` 에 기준별 1~5점을 적어 주세요.",
+        "기준: 관련성(노트와 관련) · 해보기쉬움(20~30분 안에 부담 없이) · 구체성(뭘 어떤 순서로 할지 바로 앎) · 새로움(지난 활동 반복이 아님)",
+        "어느 쪽이 자료를 참고했는지는 채점이 끝날 때까지 열지 마세요.", ""]
+    with open(out / "human_ratings.csv", "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        writer.writerow(["시나리오", "제안"] + CRIT + ["더 좋은 쪽(X/Y/같음)"])
+        for row in rows:
+            order = ["retrieval", "baseline"]
+            rng.shuffle(order)
+            key[row["scenario"]] = dict(zip(("X", "Y"), order))
+            lines += [f"## {row['scenario']}", "", "**노트**", *[f"- {n}" for n in row["notes"]], ""]
+            for label, name in zip(("X", "Y"), order):
+                a = row[name]
+                steps = [__import__("re").sub(r"\s*\[S\d+(?:\s*,\s*S\d+)*\]", "", st) for st in a["steps"]]
+                lines += [f"### 제안 {label}: {a['title']}", "", a["desc"], "", *[f"{i}. {st}" for i, st in enumerate(steps, 1)], ""]
+                writer.writerow([row["scenario"], label] + [""] * len(CRIT) + [""])
+    (out / "human_blind.md").write_text("\n".join(lines), encoding="utf-8")
+    (out / "human_key.json").write_text(json.dumps(key, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def score_human():
+    out = ROOT / "scripts" / "results"
+    key = json.loads((out / "human_key.json").read_text(encoding="utf-8"))
+    sums = {"retrieval": {c: [] for c in CRIT}, "baseline": {c: [] for c in CRIT}}
+    prefer = {"retrieval": 0, "baseline": 0, "같음": 0}
+    seen = set()
+    with open(out / "human_ratings.csv", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            name = key[r["시나리오"]][r["제안"].strip().upper()]
+            for c in CRIT:
+                if r[c].strip():
+                    sums[name][c].append(int(r[c]))
+            pick = r["더 좋은 쪽(X/Y/같음)"].strip().upper()
+            if pick and r["시나리오"] not in seen:
+                seen.add(r["시나리오"])
+                prefer[key[r["시나리오"]].get(pick, "같음") if pick in ("X", "Y") else "같음"] += 1
+    lines = ["# 사람 블라인드 평가 결과", "", "| 기준 | 자료 참고 | 기록만 |", "|---|---|---|"]
+    lines += [f"| {c} | {mean(sums['retrieval'][c])} | {mean(sums['baseline'][c])} |" for c in CRIT]
+    lines += ["", f"선호: 자료 참고 {prefer['retrieval']} · 기록만 {prefer['baseline']} · 같음 {prefer['같음']}"]
+    text = "\n".join(lines)
+    (out / "human_eval_result.md").write_text(text, encoding="utf-8")
+    return text
 
 
 def mean(values):
