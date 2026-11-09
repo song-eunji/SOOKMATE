@@ -120,15 +120,28 @@ def test_api_analysis_anonymizes_participants_and_excludes_private_fields(client
     assert "PRIVATE" not in str(result)
 
 
-def test_invented_joint_wish_and_internal_labels_are_rejected(monkeypatch):
-    for reason in ("두 학생 모두 도자기를 만들기를 희망했어요.", "A님이 원하니 B님도 좋아할 거예요."):
-        monkeypatch.setattr(activity.ai, "llm_json", lambda *args: {
-            "title": "활동", "desc": "짧은 만남", "reason": reason,
-            "steps": ["주제를 정해요", "서로 연습해요", "한 가지씩 나눠요"], "source_ids": [],
-        })
-        result = activity.generate({"common_interests": []}, ["도자기를 만들어 보고 싶다."], [])
-        assert result["generation_mode"] == "fallback"
-        assert result["llm_status"]["status"] == "invalid_response"
+def test_invented_joint_wish_is_rejected(monkeypatch):
+    monkeypatch.setattr(activity.ai, "llm_json", lambda *args: {
+        "title": "활동", "desc": "짧은 만남", "reason": "두 학생 모두 도자기를 만들기를 희망했어요.",
+        "steps": ["주제를 정해요", "서로 연습해요", "한 가지씩 나눠요"], "source_ids": [],
+    })
+    result = activity.generate({"common_interests": []}, ["도자기를 만들어 보고 싶다."], [])
+    assert result["generation_mode"] == "fallback"
+    assert result["llm_status"]["status"] == "invalid_response"
+
+
+def test_internal_labels_never_reach_the_user(monkeypatch):
+    # 한쪽 기록만 있으면 모델이 'B님이'라고 쓰곤 한다. 거부하면 매번 실패하므로 중립 표현으로 바꾼다.
+    monkeypatch.setattr(activity.ai, "llm_json", lambda *args: {
+        "title": "윷놀이", "desc": "B님이 남긴 기록을 바탕으로 해요.", "reason": "B님의 기록에서 희망이 확인됐어요.",
+        "steps": ["(5분) A님은 규칙을 알려줘요", "(10분) 한 판 해요", "(5분) 피드백해요"], "source_ids": [],
+    })
+    result = activity.generate({"common_interests": []}, ["윷놀이를 배우고 싶다."], [])
+    assert result["generation_mode"] == "llm"
+    text = str({k: result[k] for k in ("title", "desc", "reason", "steps")})
+    assert "A님" not in text and "B님" not in text
+    assert result["desc"] == "한 사람이 남긴 기록을 바탕으로 해요."
+    assert result["steps"][0] == "(5분) 한 사람은 규칙을 알려줘요"
 
 
 def test_tentative_record_specific_reason_is_allowed():

@@ -78,6 +78,19 @@ def valid_note_claims(data: dict) -> bool:
     return not re.search(r"(?:A|B)\s*님|두\s*(?:분|사람|학생)\s*(?:모두|다)\s*[^.!?\n]{0,45}(?:원했|원하|희망|동의|합의)|서로\s*합의", text)
 
 
+_LABEL = re.compile(r"(?<![A-Za-z])[AB]\s*님(이|의|은|는|도|과|께서|에게)?")
+
+
+def neutralize_labels(data: dict) -> dict:
+    """모델이 내부 구분용 participant 값(A/B)을 'B님이'처럼 쓰면 '한 사람이'로 바꾼다. 합의 날조 검사는 그대로 적용된다."""
+    def fix(text):
+        return _LABEL.sub(lambda m: "한 사람" + (m.group(1) or "").replace("께서", "이"), text) if isinstance(text, str) else text
+    out = {k: fix(v) for k, v in data.items()}
+    if isinstance(out.get("steps"), list):
+        out["steps"] = [fix(step) for step in out["steps"]]
+    return out
+
+
 def generate(ex: dict, notes: list[str], sources: list[dict], analysis: dict | None = None) -> dict:
     start = time.perf_counter()
     base = ai.make_next_activity(ex, notes)
@@ -92,7 +105,8 @@ def generate(ex: dict, notes: list[str], sources: list[dict], analysis: dict | N
             "한쪽만 기록했거나 두 기록의 주제가 달라도 정상 입력이야. 공통 관심사나 합의를 지어내지 마. "
             "한쪽의 희망을 두 사람 모두의 희망이라고 쓰지 마. 이유에는 기록의 주체를 구분해. "
             "노트에 적힌 사실과 너의 제안을 분리하고 '상대도 괜찮다면'처럼 아직 합의하지 않은 제안임을 밝혀. "
-            "사용자를 A님/B님으로 부르지 말고 '표현을 배웠다는 기록', '말이 빨라 어려웠다는 기록'처럼 근거를 설명해. "
+            "participant 값(A/B)은 작성자를 구분하는 내부 표시일 뿐이니 글에 쓰지 마. "
+        "사용자를 A님/B님으로 부르지 말고 '표현을 배웠다는 기록', '말이 빨라 어려웠다는 기록'처럼 근거를 설명해. "
             "활동은 기본 20~30분, 준비와 비용 부담을 줄이고 각자 알려주기/연습/피드백 순서를 명시해. "
             "서로의 언어·지식·특기·가능 시간을 추측하지 마. 역할을 제안할 수는 있지만 사실로 단정하지 마. "
             "공방 같은 희망이 있어도 예약·재방문·작품 수령을 필수로 만들지 말고 관련 표현·경험을 나누는 작은 다음 만남으로 구체화해. "
@@ -109,22 +123,32 @@ def generate(ex: dict, notes: list[str], sources: list[dict], analysis: dict | N
                         "sources": prompt_sources, "note_analysis": analysis}, ensure_ascii=False),
         )
     ids = {s["id"] for s in sources}
-    def is_valid(data):
-        return (
-            isinstance(data, dict)
-            and valid_note_claims(data)
-            and all(isinstance(data.get(k), str) and 0 < len(data[k].strip()) <= limit
-                    for k, limit in (("title", 80), ("desc", 400), ("reason", 300)))
-            and ai._valid_str_list(data.get("steps"), 3, 5, 150)
-            and isinstance(data.get("source_ids"), list)
-            and len(data["source_ids"]) <= len(ids)
-            and all(isinstance(i, str) and i in ids for i in data["source_ids"])
-            and (not sources or bool(data["source_ids"]))
-        )
+    def reject_reason(data) -> str:
+        """빈 문자열이면 통과. 아니면 어떤 검사에 걸렸는지(디버깅·평가 기록용)."""
+        if not isinstance(data, dict):
+            return "not_json"
+        if not valid_note_claims(data):
+            return "joint_claim_or_label"
+        for k, limit in (("title", 80), ("desc", 400), ("reason", 300)):
+            if not (isinstance(data.get(k), str) and 0 < len(data[k].strip()) <= limit):
+                return f"{k}_length"
+        if not ai._valid_str_list(data.get("steps"), 3, 5, 150):
+            return "steps_shape"
+        cited = data.get("source_ids")
+        if not isinstance(cited, list) or len(cited) > len(ids) or not all(isinstance(i, str) and i in ids for i in cited):
+            return "unknown_source_id"
+        if sources and not cited:
+            return "no_citation"
+        return ""
+
     # 형식이 어긋난 답(인용 ID 오류·길이 초과 등)은 한 번만 다시 요청한다. 한도·연결 실패는 재시도하지 않는다.
+    reasons = []
     for _ in range(2):
         data = ask()
-        valid = is_valid(data)
+        if isinstance(data, dict):
+            data = neutralize_labels(data)
+        reasons.append(reject_reason(data) if data else "")
+        valid = data is not None and not reasons[-1]
         if valid or not data:
             break
     if valid:
@@ -139,7 +163,7 @@ def generate(ex: dict, notes: list[str], sources: list[dict], analysis: dict | N
     if result["llm_status"].get("model"):
         result["llm"] = {**result["llm"], "model": result["llm_status"]["model"]}
     if data and not valid:
-        result["llm_status"] = {**result["llm_status"], "status": "invalid_response"}
+        result["llm_status"] = {**result["llm_status"], "status": "invalid_response", "rejected": reasons}
     result["generation_ms"] = round((time.perf_counter() - start) * 1000)
     return result
 
