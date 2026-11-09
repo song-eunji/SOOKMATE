@@ -146,3 +146,27 @@ def test_internal_labels_never_reach_the_user(monkeypatch):
 
 def test_tentative_record_specific_reason_is_allowed():
     assert activity.valid_note_claims({"reason": "주문 표현을 배웠다는 기록을 참고했어요. 상대도 괜찮다면 천천히 역할을 바꿔 연습해 보세요."})
+
+
+def _proposal(title):
+    return {"title": title, "desc": "설명", "reason": "기록을 참고했어요.", "steps": ["(5분) 하나", "(10분) 둘", "(5분) 셋"], "source_ids": []}
+
+
+def test_regenerate_retries_when_title_repeats_previous(monkeypatch):
+    replies = iter([_proposal("카페에서 천천히 다시 묻는 대화 연습"), _proposal("편의점에서 포장 묻고 답하기")])
+    seen = []
+    def llm(system, user):
+        import json
+        seen.append(json.loads(user)["retry_feedback"])
+        return next(replies)
+    monkeypatch.setattr(activity.ai, "llm_json", llm)
+    result = activity.generate({"common_interests": []}, ["카페 주문"], [], avoid=["카페 상황극과 천천히 다시 묻기 연습"])
+    assert result["title"] == "편의점에서 포장 묻고 답하기" and result["novel"] is True
+    assert seen[0] == "" and "너무 비슷" in seen[1]
+
+
+def test_regenerate_does_not_claim_novelty_when_model_keeps_repeating(monkeypatch):
+    monkeypatch.setattr(activity.ai, "llm_json", lambda *a: _proposal("카페에서 천천히 다시 묻는 대화 연습"))
+    result = activity.generate({"common_interests": []}, ["카페 주문"], [], avoid=["카페 상황극과 천천히 다시 묻기 연습"])
+    assert result["generation_mode"] == "llm"  # 실패로 만들지 않고 결과는 보여주되
+    assert result["novel"] is False            # 화면이 '다른 활동'이라고 말하지 않게 한다
