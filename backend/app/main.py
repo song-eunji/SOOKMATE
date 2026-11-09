@@ -20,7 +20,12 @@ from . import ai, auth, matching, views
 from .constants import BIO_MAX_LEN, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
 from .db import Base, SessionLocal, engine, ensure_columns, get_db
 from .models import ChatRead, Match, Message, Note, Report, User
+from .personas import PERSONAS
 from .seed import seed_demo
+from .notifications.router import create_router as create_notifications_router
+from .notifications.service import message_event, read_messages
+from .scheduling.coordination import matching_lock, serialized
+from .scheduling.scheduler import scheduler_lifespan
 
 DEV_MODE = os.getenv("DEV_MODE", "1") == "1"
 # 시연용: 가짜(시드) 상대가 수락해 주고 대화에 답장한다. 실제 서비스에는 가짜 사용자가 없으므로 기본은 꺼짐.
@@ -44,11 +49,16 @@ async def lifespan(app: FastAPI):
             # 들어왔을 때 가짜 유학생·국내 학생의 이번 주 자리가 이미 다 차서 추천이 하나도 없게 된다.
             if DEV_MODE:
                 matching.assign(db)
-    yield
+    with scheduler_lifespan() as scheduler:
+        app.state.scheduler = scheduler
+        try:
+            yield
+        finally:
+            app.state.scheduler = None
 
 
 def reset_seed_data(db: Session, preassign: bool) -> int:
-    """DB를 비우고 가짜 프로필 40명을 다시 넣는다. preassign 이면 가짜끼리 첫 배정까지 돌린다."""
+    """DB를 비우고 가짜 프로필을 다시 넣는다. preassign 이면 가짜끼리 첫 배정까지 돌린다."""
     db.close()
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
@@ -91,6 +101,9 @@ def me_dep(
             return user
         raise HTTPException(401, "알 수 없는 사용자예요.")
     raise HTTPException(401, "로그인이 필요해요.")
+
+
+app.include_router(create_notifications_router(me_dep))
 
 
 def run(fn, *args):
@@ -452,10 +465,11 @@ def put_language(body: LanguageIn, me: User = Depends(me_dep), db: Session = Dep
 
 @app.put("/api/me/profile")
 def put_profile(body: ProfileIn, me: User = Depends(me_dep), db: Session = Depends(get_db)):
-    me.interests, me.times, me.langs = body.interests, body.times, body.langs
-    me.teach, me.learn, me.prefs, me.nationality = body.teach, body.learn, body.prefs, body.nationality
-    db.commit()
-    matching.assign(db)  # 프로필이 바뀌면 자리가 남은 사람끼리 새로 배정
+    with matching_lock:
+        me.interests, me.times, me.langs = body.interests, body.times, body.langs
+        me.teach, me.learn, me.prefs, me.nationality = body.teach, body.learn, body.prefs, body.nationality
+        db.commit()
+        matching.assign(db)  # 프로필이 바뀌면 자리가 남은 사람끼리 새로 배정
     return views.user_me(db, me)
 
 
@@ -524,9 +538,16 @@ class Hub:
 hub = Hub()
 
 
+@serialized
 def _save_message(db: Session, match_id: int, sender_id: int, text: str) -> dict:
+    m = matching._locked(db, match_id)
+    matching._participant(m, sender_id)
+    if m.status != "confirmed":
+        raise matching.MatchError("양쪽이 수락한 만남에서만 쓸 수 있어요.", 403)
     msg = Message(match_id=match_id, sender_id=sender_id, text=text)
     db.add(msg)
+    db.flush()
+    message_event(db, m, msg)
     db.commit()
     return {"type": "message", **views.message_view(msg)}
 
@@ -536,6 +557,7 @@ def _last_read(db: Session, match_id: int, uid: int) -> int:
     return row.last_read_id if row else 0
 
 
+@serialized
 def _mark_read(db: Session, match_id: int, uid: int) -> int:
     """이 대화방의 마지막 메시지까지 읽은 것으로 기록하고, 그 메시지 번호를 돌려준다."""
     last_id = db.scalar(select(func.max(Message.id)).where(Message.match_id == match_id)) or 0
@@ -544,6 +566,7 @@ def _mark_read(db: Session, match_id: int, uid: int) -> int:
         row.last_read_id = max(row.last_read_id, last_id)
     else:
         db.add(ChatRead(match_id=match_id, user_id=uid, last_read_id=last_id))
+    read_messages(db, match_id, uid, last_id)
     db.commit()
     return last_id
 
@@ -598,7 +621,7 @@ def get_messages(match_id: int, me: User = Depends(me_dep), db: Session = Depend
 @app.post("/api/matches/{match_id}/messages")
 async def post_message(match_id: int, body: MessageIn, background: BackgroundTasks, me: User = Depends(me_dep), db: Session = Depends(get_db)):
     my_match(db, match_id, me, confirmed=True)
-    payload = _save_message(db, match_id, me.id, body.text.strip())
+    payload = run(_save_message, db, match_id, me.id, body.text.strip())
     await hub.broadcast(match_id, payload)
     background.add_task(_demo_reply, match_id, me.id)
     return payload
@@ -657,6 +680,8 @@ async def ws_chat(ws: WebSocket, match_id: int, token: str | None = None, user_i
             task = asyncio.create_task(_demo_reply(match_id, user_id))
             _demo_tasks.add(task)
             task.add_done_callback(_demo_tasks.discard)
+    except matching.MatchError:
+        await ws.close(code=4403)
     except WebSocketDisconnect:
         pass
     finally:
@@ -728,6 +753,10 @@ def put_note(match_id: int, body: NoteIn, me: User = Depends(me_dep), db: Sessio
         db.add(n)
     for k, v in body.model_dump().items():
         setattr(n, k, v)
+    from .models import ActivityRun
+    stale = db.scalar(select(ActivityRun).where(ActivityRun.match_id == match_id))
+    if stale:
+        db.delete(stale)
     db.commit()
     return _note_view(n)
 
@@ -738,6 +767,10 @@ def delete_note(match_id: int, me: User = Depends(me_dep), db: Session = Depends
     n = _note(db, match_id, me.id)
     if n:
         db.delete(n)
+        from .models import ActivityRun
+        stale = db.scalar(select(ActivityRun).where(ActivityRun.match_id == match_id))
+        if stale:
+            db.delete(stale)
         db.commit()
     return {"ok": True}
 
@@ -768,11 +801,49 @@ def next_activity(match_id: int, me: User = Depends(me_dep), db: Session = Depen
     return ai.make_next_activity(ex, shared)
 
 
+@app.get("/api/matches/{match_id}/activity-result")
+def activity_result(match_id: int, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .activity_store import current, view
+    ex, _ = _shared_activity_context(db, match_id, me)
+    row = current(db, match_id, ex)
+    return view(row, me.id) if row else None
+
+
 @app.post("/api/matches/{match_id}/next-activity")
-def generate_next_activity(match_id: int, compare: bool = False, me: User = Depends(me_dep), db: Session = Depends(get_db)):
-    from .next_activity import recommend
+def generate_next_activity(match_id: int, compare: bool = False, regenerate: bool = False, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .activity_store import run, fingerprint, current
     ex, shared = _shared_activity_context(db, match_id, me)
-    return recommend(ex, shared, compare=compare)
+    if not shared:
+        raise HTTPException(422, "추천에 사용할 공유 노트를 먼저 저장해 주세요.")
+    response = run(db, match_id, me.id, ex, shared, compare, regenerate=regenerate)
+    db.expire_all()
+    latest, _ = _shared_activity_context(db, match_id, me)
+    if fingerprint(latest) != fingerprint(ex):
+        current(db, match_id, latest)
+        raise HTTPException(409, "생성 중 공유 노트가 변경됐습니다. 최신 노트로 다시 추천받아 주세요.")
+    return response
+
+
+class ActivityRatingIn(BaseModel):
+    run_id: int
+    ratings: dict[str, int]
+
+
+@app.put("/api/matches/{match_id}/activity-ratings")
+def activity_ratings(match_id: int, body: ActivityRatingIn, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .activity_store import current
+    ex, _ = _shared_activity_context(db, match_id, me)
+    row = current(db, match_id, ex)
+    if not row or row.id != body.run_id:
+        raise HTTPException(409, "노트가 변경되어 평가할 추천이 만료됐습니다.")
+    if not row.payload.get("comparable"):
+        raise HTTPException(422, "성공한 비교 결과만 평가할 수 있습니다.")
+    allowed = {f"{mode}-{i}" for mode in ("retrieval", "baseline") for i in range(4)}
+    if any(k not in allowed or type(v) is not int or not 1 <= v <= 5 for k, v in body.ratings.items()):
+        raise HTTPException(422, "평가는 항목별 1~5점이어야 합니다.")
+    row.ratings = {**row.ratings, str(me.id): body.ratings}
+    db.commit()
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ 신고 · 차단
@@ -794,10 +865,11 @@ def report(body: ReportIn, me: User = Depends(me_dep), db: Session = Depends(get
 # ----------------------------------------------------------------- 개발용 도구
 @app.post("/api/dev/reset")
 def dev_reset(db: Session = Depends(get_db)):
-    """DB를 비우고 합성 프로필 40명을 다시 넣은 뒤 첫 배정을 돌린다."""
+    """DB를 비우고 가짜 프로필을 다시 넣은 뒤 첫 배정을 돌린다."""
     if not DEV_MODE:
         raise HTTPException(404)
-    return {"users": 40, "matches": reset_seed_data(db, preassign=True)}
+    with matching_lock:
+        return {"users": len(PERSONAS), "matches": reset_seed_data(db, preassign=True)}
 
 
 @app.post("/api/dev/matches/{match_id}/partner-accept")
@@ -822,6 +894,6 @@ async def dev_partner_message(match_id: int, me: User = Depends(me_dep), db: Ses
     m = my_match(db, match_id, me, confirmed=True)
     partner = views.partner_of(db, m, me.id)
     count = db.scalar(select(func.count(Message.id)).where(Message.match_id == match_id, Message.sender_id == partner.id)) or 0
-    payload = _save_message(db, match_id, partner.id, DEV_REPLIES[count % len(DEV_REPLIES)])
+    payload = run(_save_message, db, match_id, partner.id, DEV_REPLIES[count % len(DEV_REPLIES)])
     await hub.broadcast(match_id, payload)
     return {"ok": True}
