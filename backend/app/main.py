@@ -460,6 +460,10 @@ def put_note(match_id: int, body: NoteIn, me: User = Depends(me_dep), db: Sessio
         db.add(n)
     for k, v in body.model_dump().items():
         setattr(n, k, v)
+    from .models import ActivityRun
+    stale = db.scalar(select(ActivityRun).where(ActivityRun.match_id == match_id))
+    if stale:
+        db.delete(stale)
     db.commit()
     return _note_view(n)
 
@@ -470,21 +474,83 @@ def delete_note(match_id: int, me: User = Depends(me_dep), db: Session = Depends
     n = _note(db, match_id, me.id)
     if n:
         db.delete(n)
+        from .models import ActivityRun
+        stale = db.scalar(select(ActivityRun).where(ActivityRun.match_id == match_id))
+        if stale:
+            db.delete(stale)
         db.commit()
     return {"ok": True}
 
 
-@app.get("/api/matches/{match_id}/next-activity")
-def next_activity(match_id: int, me: User = Depends(me_dep), db: Session = Depends(get_db)):
-    """두 사람 노트 중 '공유가 켜진 다음 활동'만 근거로 쓴다."""
+def _shared_activity_context(db, match_id, me):
     m = my_match(db, match_id, me, confirmed=True)
     partner = views.partner_of(db, m, me.id)
-    shared: list[str] = []
-    for author in (me, partner):
+    shared = []
+    entries = []
+    for author in sorted((me, partner), key=lambda user: user.id):
         n = _note(db, match_id, author.id)
-        if n and n.share_next and n.next_text:
-            shared.append(n.next_text)
-    return ai.make_next_activity(matching.explain(me, partner), shared)
+        if n:
+            for field, flag in (("next_text", "share_next"), ("expr", "share_expr"), ("fact", "share_fact")):
+                value = getattr(n, field)
+                if getattr(n, flag) and value and value.strip():
+                    shared.append(value.strip())
+                    entries.append({"id": f"N{len(entries) + 1}", "participant": "A" if author.id == min(me.id, partner.id) else "B",
+                                    "field": field, "text": value.strip()})
+    ex = matching.explain(me, partner)
+    ex["shared_entries"] = entries
+    return ex, shared
+
+
+@app.get("/api/matches/{match_id}/next-activity")
+def next_activity(match_id: int, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    # Reading a note stays cheap; external generation is an explicit POST action.
+    ex, shared = _shared_activity_context(db, match_id, me)
+    return ai.make_next_activity(ex, shared)
+
+
+@app.get("/api/matches/{match_id}/activity-result")
+def activity_result(match_id: int, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .activity_store import current, view
+    ex, _ = _shared_activity_context(db, match_id, me)
+    row = current(db, match_id, ex)
+    return view(row, me.id) if row else None
+
+
+@app.post("/api/matches/{match_id}/next-activity")
+def generate_next_activity(match_id: int, compare: bool = False, regenerate: bool = False, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .activity_store import run, fingerprint, current
+    ex, shared = _shared_activity_context(db, match_id, me)
+    if not shared:
+        raise HTTPException(422, "추천에 사용할 공유 노트를 먼저 저장해 주세요.")
+    response = run(db, match_id, me.id, ex, shared, compare, regenerate=regenerate)
+    db.expire_all()
+    latest, _ = _shared_activity_context(db, match_id, me)
+    if fingerprint(latest) != fingerprint(ex):
+        current(db, match_id, latest)
+        raise HTTPException(409, "생성 중 공유 노트가 변경됐습니다. 최신 노트로 다시 추천받아 주세요.")
+    return response
+
+
+class ActivityRatingIn(BaseModel):
+    run_id: int
+    ratings: dict[str, int]
+
+
+@app.put("/api/matches/{match_id}/activity-ratings")
+def activity_ratings(match_id: int, body: ActivityRatingIn, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .activity_store import current
+    ex, _ = _shared_activity_context(db, match_id, me)
+    row = current(db, match_id, ex)
+    if not row or row.id != body.run_id:
+        raise HTTPException(409, "노트가 변경되어 평가할 추천이 만료됐습니다.")
+    if not row.payload.get("comparable"):
+        raise HTTPException(422, "성공한 비교 결과만 평가할 수 있습니다.")
+    allowed = {f"{mode}-{i}" for mode in ("retrieval", "baseline") for i in range(4)}
+    if any(k not in allowed or type(v) is not int or not 1 <= v <= 5 for k, v in body.ratings.items()):
+        raise HTTPException(422, "평가는 항목별 1~5점이어야 합니다.")
+    row.ratings = {**row.ratings, str(me.id): body.ratings}
+    db.commit()
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ 신고 · 차단
