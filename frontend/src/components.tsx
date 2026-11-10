@@ -11,7 +11,7 @@ export function Chip({ on, onClick, warm, children }: { on: boolean; onClick: ()
   );
 }
 
-/** 직접 입력 + 추천 칩으로 고르는 태그 입력. tone 은 파랑(알려줄 수 있는 것) / 따뜻한 색(배우고 싶은 것) */
+/** 직접 입력 + 추천 칩으로 고르는 태그 입력. tone은 기본색(알려줄 수 있는 것) / 포인트색(배우고 싶은 것) */
 export function TagInput({
   values,
   onChange,
@@ -85,21 +85,19 @@ export function TagInput({
   );
 }
 
-/** SOOKMATE 로고: 파랑(나) 티켓과 분홍(상대) 티켓이 겹치고, 겹친 곳이 노랑 */
-const TICKET = "M6 0H42a6 6 0 0 1 6 6V12a4 4 0 0 0 0 8V26a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V20a4 4 0 0 0 0-8V6A6 6 0 0 1 6 0Z";
+/** 작은 헤더에서도 선명하게 보이도록 단순화한 블루·버터 대화 심벌. */
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
-    <svg className="logomark" width={size} height={(size * 40) / 56} viewBox="0 0 56 40" aria-hidden="true">
-      <defs>
-        <clipPath id="logo-overlap">
-          <path transform="translate(2,3) scale(.78)" d={TICKET} />
-        </clipPath>
-      </defs>
-      <path transform="translate(2,3) scale(.78)" d={TICKET} fill="#3a3fe4" />
-      <path transform="translate(16,13) scale(.78)" d={TICKET} fill="#ff8ac0" />
-      <g clipPath="url(#logo-overlap)">
-        <path transform="translate(16,13) scale(.78)" d={TICKET} fill="#ffe552" />
+    <svg className="logomark bean-logo" width={size * 1.25} height={size} viewBox="0 0 60 48" fill="none" aria-hidden="true">
+      <path d="M27 7C17 2 5 8 4 21c-1 8 3 13 8 16l-3 7 11-4c13 2 21-7 20-18C39 15 34 10 27 7Z" fill="#86bafa" />
+      <path d="M43 12c-10-4-20 3-20 14 0 10 9 16 19 13l12 4-4-8c9-9 5-19-7-23Z" fill="#f8df8d" />
+      <g fill="#34445c">
+        <circle cx="13.5" cy="18" r="1.7" />
+        <circle cx="21.5" cy="18" r="1.7" />
+        <circle cx="35.5" cy="22" r="1.7" />
+        <circle cx="43.5" cy="22" r="1.7" />
       </g>
+      <path d="M14 24c2 3 5 3 7 0M36 28c2 3 5 3 7 0" stroke="#34445c" strokeWidth="2.3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -109,7 +107,7 @@ export function Logo() {
     <span className="logo" role="img" aria-label="SOOKMATE">
       <LogoMark size={40} />
       <span className="wordmark" aria-hidden="true">
-        SOOK<b>MATE</b>
+        sookmate
       </span>
     </span>
   );
@@ -127,9 +125,17 @@ export function Lock({ title, text, action, onAction }: { title: string; text: s
   );
 }
 
-/** 이름 첫 글자를 둥근 원에 담은 아바타 */
+/** 이름으로 고정된 캐릭터를 선택해 모든 화면에서 같은 기본 프사를 보여준다. */
 export function Avatar({ name, size }: { name: string; size?: "lg" }) {
-  return <div className={`av ${size ?? ""}`}>{name.trim().slice(0, 1) || "?"}</div>;
+  const normalized = name.trim().normalize("NFC");
+  let hash = 0;
+  for (const letter of normalized) hash = (Math.imul(hash, 31) + letter.codePointAt(0)!) >>> 0;
+  const variant = hash % 4;
+  return (
+    <div className={`av bean-avatar ${size ?? ""}`} role="img" aria-label={`${name || "사용자"} 프로필`}>
+      <span className="bean-avatar-sprite" aria-hidden="true" style={{ backgroundPosition: `${variant % 2 === 0 ? 0 : 100}% ${variant < 2 ? 0 : 100}%` }} />
+    </div>
+  );
 }
 
 /** 확정된 만남이 여럿일 때 상대를 고르는 줄 */
