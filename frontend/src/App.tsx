@@ -1,3 +1,4 @@
+import DevUserPicker from "./DevUserPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SESSION_ENDED, api, clearToken, clearUserId, getToken, getUserId, setToken, setUserId } from "./api";
 import type { ChatRoom, MatchView, Me, Options, UserLite } from "./types";
@@ -216,15 +217,7 @@ export default function App() {
         <Logo />
         <div className="notification-header-actions">
           {mode === "dev" && opts?.dev_mode && users.length > 0 && (
-            <label className="dev" title="개발용 사용자 전환">
-              <select id="dev-user" aria-label="개발용 사용자" value={userId ?? ""} onChange={(e) => switchUser(Number(e.target.value))}>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} · {u.kind === "domestic" ? "국내" : "유학생"}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DevUserPicker users={users} value={userId} onChange={switchUser} />
           )}
           {me && <NotificationPanel key={me.id} userId={me.id} onNavigate={openNotification} />}
         </div>

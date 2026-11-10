@@ -1,0 +1,19 @@
+/* 개발 도구는 브랜드보다 작고 조용하게 표시한다. */
+.dev-user-trigger { display: inline-flex; align-items: center; gap: 6px; max-width: 100px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 12px; }
+.dev-user-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-user-trigger svg { flex: none; }
+.dev-user-dialog { width: min(340px, calc(100vw - 32px)); max-height: 70dvh; padding: 0; border: 1px solid var(--line); border-radius: 16px; background: #fff; color: var(--ink); box-shadow: 0 16px 48px #20242924; }
+.dev-user-dialog::backdrop { background: #20242940; }
+.dev-user-content { padding: 18px; }
+.dev-user-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 16px; }
+.dev-user-heading h2 { margin: 0; font-size: 16px; color: var(--ink); }
+.dev-user-heading p { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.dev-user-heading button { width: 36px; height: 36px; flex: none; border: 0; border-radius: 8px; background: var(--surface); font-size: 22px; }
+.dev-user-content input { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; font-size: 16px; }
+.dev-user-results { max-height: min(40dvh, 320px); overflow-y: auto; overscroll-behavior: contain; list-style: none; padding: 0; margin: 12px 0 0; }
+.dev-user-results button { width: 100%; min-height: 46px; display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 0; border-radius: 8px; background: #fff; text-align: left; font-size: 14px; }
+.dev-user-results button:hover, .dev-user-results button[aria-current] { background: var(--surface); }
+.dev-user-results small { margin-left: 10px; color: var(--muted); font-size: 12px; }
+.dev-user-empty { padding: 20px 10px; color: var(--muted); font-size: 14px; }
+@media (max-width: 380px) { .top { padding-inline: 16px; } .wordmark { font-size: 18px; } .logo .logomark { width: 32px; height: 32px; } .notification-header-actions { gap: 6px; } }
+
