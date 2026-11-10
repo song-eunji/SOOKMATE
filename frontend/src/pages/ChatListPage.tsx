@@ -19,7 +19,10 @@ export default function ChatListPage({ me, rooms, onOpen, goRec }: Props) {
 
   return (
     <>
-      <h1>{t("대화")}</h1>
+      <div>
+        <h1>{t("만남")}</h1>
+        <p className="lead">{t("상대를 누르면 대화 · 준비 · 노트가 나와요.")}</p>
+      </div>
       <ul className="rooms">
         {rooms.map((r) => {
           const last = r.last_message;

@@ -3,16 +3,11 @@ import { api } from "../api";
 import { Avatar, TranslateButton } from "../components";
 import { useI18n } from "../i18n";
 
-/** 점수를 원형 링과 숫자로 보여준다 */
-function ScoreRing({ value }: { value: number }) {
+/** 점수를 도장처럼 찍어 보여준다 */
+function ScoreStamp({ value }: { value: number }) {
   const { t } = useI18n();
-  const C = 2 * Math.PI * 25;
   return (
-    <div className="ring" role="img" aria-label={t("{value}점", { value })}>
-      <svg width="60" height="60" viewBox="0 0 60 60" aria-hidden="true">
-        <circle cx="30" cy="30" r="25" fill="none" stroke="var(--line)" strokeWidth="7" />
-        <circle cx="30" cy="30" r="25" fill="none" stroke="var(--accent)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${(value / 100) * C} ${C}`} transform="rotate(-90 30 30)" />
-      </svg>
+    <div className="stamp" role="img" aria-label={t("{value}점", { value })}>
       <b>{value}</b>
     </div>
   );
@@ -35,6 +30,8 @@ function hoursLeft(iso: string): number {
 export default function RecommendPage({ opts, matches, onChanged, onOpenChat, flash }: Props) {
   const { t, tv } = useI18n();
   const [busy, setBusy] = useState<number | null>(null);
+  // 수락 여부를 고르는 추천이 있으면, 맨 아래에 안내를 한 번만 보여준다 (기한은 가장 빠른 것 기준)
+  const undecided = matches.filter((m) => m.status !== "confirmed" && !m.my_accepted);
 
   const act = async (id: number, fn: () => Promise<unknown>, done?: string) => {
     setBusy(id);
@@ -82,64 +79,76 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
         const e = m.explain;
         return (
           <section key={m.id} className="sec" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <article className="card">
-              <div className="who">
-                <Avatar name={p.name} />
-                <div className="grow">
-                  <b>{p.name}</b>
-                  <span className="m">
-                    {[p.dept, p.langs.join(", ")].filter(Boolean).join(" · ")}
-                  </span>
+            <article className="ticket">
+              <div className="tt">
+                <div className="who">
+                  <Avatar name={p.name} />
+                  <div className="grow">
+                    <b>{p.name}</b>
+                    <span className="m">{[p.dept, p.langs.join(", ")].filter(Boolean).join(" · ")}</span>
+                  </div>
+                  <ScoreStamp value={m.score.total} />
                 </div>
-                <ScoreRing value={m.score.total} />
-              </div>
-              {p.bio && (
-                <p className="bio">
-                  “{p.bio}”
-                  <TranslateButton text={p.bio} />
-                </p>
-              )}
-
-              <div className="reason">
-                <small>{t("추천 이유")}</small>
-                {e.reason}
-                <TranslateButton text={e.reason} />
-              </div>
-
-              <div>
-                <div className="chips">
-                  {e.common_interests.map((v) => (
-                    <span className="tag" key={v}>
-                      {tv(v)}
-                    </span>
-                  ))}
-                  {(e.similar_interests ?? []).map((s) => (
-                    <span className="tag" key={`${s.mine}-${s.theirs}`} title={t("글자는 달라도 뜻이 가까운 관심사예요")}>
-                      {tv(s.mine)} ≈ {tv(s.theirs)}
-                    </span>
-                  ))}
-                  {e.common_times.map((v) => (
-                    <span className="tag neutral" key={v}>
-                      {tv(v)}
-                    </span>
-                  ))}
-                  {e.common_interests.length + (e.similar_interests?.length ?? 0) + e.common_times.length === 0 && <span className="hint">{t("겹치는 항목이 없어요")}</span>}
-                </div>
+                {p.bio && (
+                  <p className="bio">
+                    “{p.bio}”
+                    <TranslateButton text={p.bio} />
+                  </p>
+                )}
               </div>
 
               {(e.my_topic || e.partner_topic) && (
-                <div className="swap">
-                  <div className="a">
-                    <small>{t("내가 알려줄 것")}</small>
-                    {e.my_topic ? tv(e.my_topic) : t("정해지지 않았어요")}
+                <>
+                  <div className="cut" aria-hidden="true" />
+                  <div className="tm">
+                    <p className="cap">{t("서로 하나씩 알려줘요")}</p>
+                    <div className="swap">
+                      <div className="a">
+                        <small>{t("내가 알려줄 것")}</small>
+                        <b>{e.my_topic ? tv(e.my_topic) : t("정해지지 않았어요")}</b>
+                      </div>
+                      <span className="x" aria-hidden="true">⇄</span>
+                      <div className="b">
+                        <small>{t("{name}님이 알려줄 것", { name: p.name })}</small>
+                        <b>{e.partner_topic ? tv(e.partner_topic) : t("정해지지 않았어요")}</b>
+                      </div>
+                    </div>
                   </div>
-                  <span className="x">⇄</span>
-                  <div className="b">
-                    <small>{t("{name}님이 알려줄 것", { name: p.name })}</small>
-                    {e.partner_topic ? tv(e.partner_topic) : t("정해지지 않았어요")}
+                </>
+              )}
+
+              <div className="cut" aria-hidden="true" />
+              <div className="tb">
+                <div className="reason">
+                  <small>{t("추천 이유")}</small>
+                  {e.reason}
+                </div>
+                <div className="overlap">
+                  <div className="chips">
+                    <span className="lab">{t("겹치는 것")}</span>
+                    {e.common_interests.map((v) => (
+                      <span className="tag" key={v}>
+                        {tv(v)}
+                      </span>
+                    ))}
+                    {(e.similar_interests ?? []).map((x) => (
+                      <span className="tag" key={`${x.mine}-${x.theirs}`} title={t("글자는 달라도 뜻이 가까운 관심사예요")}>
+                        {tv(x.mine)} ≈ {tv(x.theirs)}
+                      </span>
+                    ))}
+                    {e.common_interests.length + (e.similar_interests?.length ?? 0) === 0 && <span className="hint">{t("겹치는 관심사가 없어요")}</span>}
+                  </div>
+                  <div className="chips">
+                    <span className="lab">{t("겹치는 시간")}</span>
+                    {e.common_times.map((v) => (
+                      <span className="tag" key={v}>
+                        {tv(v)}
+                      </span>
+                    ))}
+                    {e.common_times.length === 0 && <span className="hint">{t("겹치는 시간이 없어요")}</span>}
                   </div>
                 </div>
-              )}
+              </div>
             </article>
 
             {waiting && (
@@ -167,18 +176,35 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
               <>
                 <div className="row">
                   <button className="btn ghost" disabled={busy === m.id} onClick={() => act(m.id, () => api.reject(m.id), t("예약을 풀고 다음 추천을 찾았어요"))}>
-                    {t("다른 추천 보기")}
+                    {t("거절하기")}
                   </button>
                   <button className="btn" disabled={busy === m.id} onClick={() => act(m.id, () => api.accept(m.id))}>
                     {t("수락하기")}
                   </button>
                 </div>
-                <p className="hint">{t("거절하면 예약이 풀리고, 미매칭자만 다시 배정돼요. 수락 기한은 약 {h}시간 남았어요.", { h: hoursLeft(m.expires_at) })}</p>
               </>
             )}
           </section>
         );
       })}
+
+      {undecided.length > 0 && (
+        <p className="hint">{t("거절하면 예약이 풀리고, 미매칭자만 다시 배정돼요. 수락 기한은 약 {h}시간 남았어요.", { h: Math.min(...undecided.map((m) => hoursLeft(m.expires_at))) })}</p>
+      )}
+
+      {matches.length > 0 && (
+        <button
+          className="btn ghost more-rec"
+          onClick={() =>
+            api
+              .refresh()
+              .then((r) => onChanged().then(() => flash(r.created ? t("새 추천이 생겼어요") : t("아직 새 후보가 없어요"))))
+              .catch((e) => flash((e as Error).message))
+          }
+        >
+          {t("다른 추천 보기")}
+        </button>
+      )}
     </>
   );
 }

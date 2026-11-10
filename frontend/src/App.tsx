@@ -9,25 +9,29 @@ import ChatPage from "./pages/ChatPage";
 import ChatListPage from "./pages/ChatListPage";
 import BriefPage from "./pages/BriefPage";
 import NotesPage from "./pages/NotesPage";
+import RoomView, { type RoomTab } from "./pages/RoomView";
 import BasicForm from "./pages/BasicForm";
 import LoginPage from "./pages/LoginPage";
 import NotificationPanel from "./features/notifications/NotificationPanel";
 import { navigateFromNotification } from "./features/notifications/navigate";
 import type { AppNotification } from "./features/notifications/types";
 
-type Tab = "profile" | "rec" | "chat" | "brief" | "note";
+// 아래 탭은 3개. 만남 안에서는 상대 한 명을 골라 대화 · 준비 · 노트를 따로 본다.
+type Tab = "rec" | "meet" | "me";
 
 const TABS: [Tab, string, string][] = [
-  ["profile", "프로필", '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/>'],
   ["rec", "추천", '<path d="M12 3l2.2 5.4 5.8.5-4.4 3.8 1.4 5.6L12 15.2 7 18.3l1.4-5.6L4 8.9l5.8-.5z"/>'],
-  ["chat", "대화", '<path d="M4 5h16v11H9l-5 4z"/>'],
-  ["brief", "브리핑", '<path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/>'],
-  ["note", "노트", '<path d="M5 4h14v16H5z"/><path d="M9 4v16M12 9h4"/>'],
+  ["meet", "만남", '<path d="M4 5h16v11H9l-5 4z"/>'],
+  ["me", "내 정보", '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/>'],
 ];
 
+// 예전 주소(#profile, #chat 등)도 새 탭으로 이어 준다
+const LEGACY: Record<string, Tab> = { profile: "me", chat: "meet", brief: "meet", note: "meet" };
+
 function initialTab(): Tab {
-  const h = location.hash.replace("#", "") as Tab;
-  return TABS.some(([k]) => k === h) ? h : "profile";
+  const h = location.hash.replace("#", "");
+  if (TABS.some(([k]) => k === h)) return h as Tab;
+  return LEGACY[h] ?? "me";
 }
 
 export default function App() {
@@ -43,6 +47,8 @@ export default function App() {
   const [inRoom, setInRoom] = useState(false);
   const unreadRef = useRef(-1); // -1 = 아직 한 번도 불러오지 않음 (처음 불러올 때는 알리지 않는다)
   const [tab, setTabState] = useState<Tab>(initialTab());
+  const [sub, setSub] = useState<RoomTab>("chat");
+  const [pickedQs, setPickedQs] = useState<Record<number, string[]>>({}); // 준비 탭에서 고른 질문 (상대별)
   const [activeId, setActiveId] = useState<number | null>(null);
   const [toast, setToast] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -66,8 +72,10 @@ export default function App() {
 
   const roomOpenRef = useRef(false);
   const tabRef = useRef<Tab>(tab);
+  const subRef = useRef<RoomTab>(sub);
   roomOpenRef.current = inRoom;
   tabRef.current = tab;
+  subRef.current = sub;
 
   const reload = useCallback(async () => {
     const requestedUser = getUserId();
@@ -78,7 +86,7 @@ export default function App() {
     setRooms(rs);
     // 방 밖에서 새 메시지가 오면 알려 준다
     const total = rs.reduce((n, r) => n + r.unread, 0);
-    if (unreadRef.current >= 0 && total > unreadRef.current && !(roomOpenRef.current && tabRef.current === "chat")) flash("새 메시지가 왔어요");
+    if (unreadRef.current >= 0 && total > unreadRef.current && !(roomOpenRef.current && tabRef.current === "meet" && subRef.current === "chat")) flash("새 메시지가 왔어요");
     unreadRef.current = total;
     setLoadError("");
   }, [flash]);
@@ -170,7 +178,12 @@ export default function App() {
   const openChat = (id: number) => {
     setActiveId(id);
     setInRoom(true);
-    setTab("chat");
+    setSub("chat");
+    setTab("meet");
+  };
+  const goRec = () => {
+    setInRoom(false);
+    setTab("rec");
   };
 
   const meIdRef = useRef<number | null>(null);
@@ -193,11 +206,12 @@ export default function App() {
     });
   };
 
-  const inChat = tab === "chat" && inRoom && !!active;
+  const inRoomView = tab === "meet" && inRoom && !!active;
+  const inChat = inRoomView && sub === "chat";
   const totalUnread = rooms.reduce((n, r) => n + r.unread, 0);
 
   return (
-    <div className={`app ${inChat ? "chatmode" : ""} ${!mode ? "loginmode" : ""}`}>
+    <div className={`app ${inChat ? "chatmode" : ""} ${inRoomView ? "roommode" : ""} ${!mode ? "loginmode" : ""}`}>
       <header className="top">
         <Logo />
         <div className="notification-header-actions">
@@ -228,33 +242,35 @@ export default function App() {
         {me && opts && !me.onboarded && <BasicForm me={me} opts={opts} first flash={flash} onSaved={reload} />}
         {me && opts && me.onboarded && (
           <>
-            {tab === "profile" && <ProfilePage me={me} opts={opts} flash={flash} onLogout={logout} onSaved={async () => { await reload(); setTab("rec"); }} />}
+            {tab === "me" && <ProfilePage me={me} opts={opts} flash={flash} onLogout={logout} onSaved={async () => { await reload(); setTab("rec"); }} />}
             {tab === "rec" && <RecommendPage me={me} opts={opts} matches={matches} onChanged={reload} onOpenChat={openChat} flash={flash} />}
-            {tab === "chat" && (inRoom && active ? (
-              <ChatPage me={me} active={active} onBack={() => setInRoom(false)} onChanged={reload} flash={flash} goNote={() => setTab("note")} />
+            {tab === "meet" && (inRoomView && active ? (
+              <RoomView active={active} sub={sub} onSub={setSub} onBack={() => setInRoom(false)} onChanged={reload} flash={flash}>
+                {sub === "chat" && <ChatPage me={me} active={active} onChanged={reload} flash={flash} goNote={() => setSub("note")} picked={pickedQs[active.id] ?? []} />}
+                {sub === "brief" && <BriefPage active={active} confirmed={[active]} onPick={setActiveId} goRec={goRec} goNote={() => setSub("note")} goChat={() => setSub("chat")} flash={flash} picked={pickedQs[active.id] ?? []} onPicked={(qs) => setPickedQs((p) => ({ ...p, [active.id]: qs }))} />}
+                {sub === "note" && <NotesPage developerMode={Boolean(opts?.dev_mode)} active={active} confirmed={[active]} onPick={setActiveId} goRec={goRec} goChat={openChat} flash={flash} />}
+              </RoomView>
             ) : (
-              <ChatListPage me={me} rooms={rooms} onOpen={openChat} goRec={() => setTab("rec")} />
+              <ChatListPage me={me} rooms={rooms} onOpen={openChat} goRec={goRec} />
             ))}
-            {tab === "brief" && <BriefPage active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} goNote={() => setTab("note")} flash={flash} />}
-            {tab === "note" && <NotesPage developerMode={Boolean(opts?.dev_mode)} active={active} confirmed={confirmed} onPick={setActiveId} goRec={() => setTab("rec")} goChat={openChat} flash={flash} />}
           </>
         )}
       </main>
 
-      {me?.onboarded && (
+      {me?.onboarded && !inRoomView && (
         <nav>
           {TABS.map(([k, label, svg]) => (
             <button
               key={k}
               className={tab === k ? "on" : ""}
               onClick={() => {
-                if (k === "chat") setInRoom(false); // 대화 탭을 누르면 항상 목록부터
+                if (k === "meet") setInRoom(false); // 만남 탭을 누르면 항상 목록부터
                 setTab(k);
               }}
             >
               <span className="ico">
                 <svg viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML={{ __html: svg }} />
-                {k === "chat" && totalUnread > 0 && <span className="badge dot">{totalUnread > 99 ? "99+" : totalUnread}</span>}
+                {k === "meet" && totalUnread > 0 && <span className="badge dot">{totalUnread > 99 ? "99+" : totalUnread}</span>}
               </span>
               {t(label)}
             </button>

@@ -85,16 +85,21 @@ export function TagInput({
   );
 }
 
-/** SOOKMATE 로고: 서로 말을 건네는 두 말풍선(파랑 = 알려줄 수 있는 것, 코랄 = 배우고 싶은 것) + 글자 */
+/** SOOKMATE 로고: 파랑(나) 티켓과 분홍(상대) 티켓이 겹치고, 겹친 곳이 노랑 */
+const TICKET = "M6 0H42a6 6 0 0 1 6 6V12a4 4 0 0 0 0 8V26a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V20a4 4 0 0 0 0-8V6A6 6 0 0 1 6 0Z";
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
-    <svg className="logomark" width={size} height={size * 0.9} viewBox="0 0 40 36" aria-hidden="true">
-      <path d="M8 3h16a7 7 0 0 1 7 7v7a7 7 0 0 1-7 7H14l-6 5v-5a7 7 0 0 1-5-6.7V10a7 7 0 0 1 5-7z" fill="var(--accent)" />
-      <path d="M16 12h16a7 7 0 0 1 7 7v6a7 7 0 0 1-3 5.7V35l-6-4.5H23a7 7 0 0 1-7-7V19a7 7 0 0 1 0-7z" fill="var(--warm)" fillOpacity="0.92" />
-      <circle cx="12" cy="13" r="1.6" fill="#fff" />
-      <circle cx="18" cy="13" r="1.6" fill="#fff" />
-      <circle cx="24.5" cy="22" r="1.6" fill="#fff" />
-      <circle cx="30.5" cy="22" r="1.6" fill="#fff" />
+    <svg className="logomark" width={size} height={(size * 40) / 56} viewBox="0 0 56 40" aria-hidden="true">
+      <defs>
+        <clipPath id="logo-overlap">
+          <path transform="translate(2,3) scale(.78)" d={TICKET} />
+        </clipPath>
+      </defs>
+      <path transform="translate(2,3) scale(.78)" d={TICKET} fill="#3a3fe4" />
+      <path transform="translate(16,13) scale(.78)" d={TICKET} fill="#ff8ac0" />
+      <g clipPath="url(#logo-overlap)">
+        <path transform="translate(16,13) scale(.78)" d={TICKET} fill="#ffe552" />
+      </g>
     </svg>
   );
 }
@@ -102,9 +107,9 @@ export function LogoMark({ size = 32 }: { size?: number }) {
 export function Logo() {
   return (
     <span className="logo" role="img" aria-label="SOOKMATE">
-      <LogoMark size={38} />
+      <LogoMark size={40} />
       <span className="wordmark" aria-hidden="true">
-        SOOKMATE
+        SOOK<b>MATE</b>
       </span>
     </span>
   );

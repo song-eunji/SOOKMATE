@@ -214,7 +214,7 @@ export default function LoginPage({ opts, onLoggedIn, onDev }: Props) {
       <div className="login-body">
         <div className="login-brand">
           <LogoMark size={76} />
-          <span className="login-word">SOOKMATE</span>
+          <span className="login-word">SOOK<b>MATE</b></span>
           <p className="login-tag">{tagline}</p>
         </div>
 

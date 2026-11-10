@@ -1,23 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { api, loadActivity, wsUrl } from "../api";
 import { ActivityBody, proposalText } from "./ActivityResults";
-import { Avatar, TranslateButton } from "../components";
+import { TranslateButton } from "../components";
 import { useI18n } from "../i18n";
 import type { ChatMessage, MatchView, Me, SavedActivity } from "../types";
 
 interface Props {
   me: Me;
   active: MatchView;
-  onBack: () => void;
   onChanged: () => Promise<void>;
   flash: (msg: string) => void;
   goNote: () => void;
+  /** 준비 탭에서 골라 온 질문 */
+  picked?: string[];
 }
 
 // 빠른 답장은 보내는 사람의 화면 언어로 나간다
 const QUICK = ["수요일 오후 2시 어때요?", "학생회관 카페에서 볼까요?"];
-// 신고 사유는 서버에 한국어 그대로 저장하고, 화면에서만 번역해서 보여준다
-const REPORT_REASONS = ["부적절한 말이나 행동", "불쾌한 요청", "기타"];
 
 type WsEvent =
   | ({ type: "message" } & ChatMessage)
@@ -64,11 +63,10 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
   );
 }
 
-export default function ChatPage({ me, active, onBack, onChanged, flash, goNote }: Props) {
+export default function ChatPage({ me, active, onChanged, flash, goNote, picked = [] }: Props) {
   const { t, clock } = useI18n();
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [menu, setMenu] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const matchId = active.id;
@@ -129,63 +127,8 @@ export default function ChatPage({ me, active, onBack, onChanged, flash, goNote 
     }
   };
 
-  const report = async (reason: string) => {
-    try {
-      await api.report(partner.id, active.id, reason);
-      flash("신고를 접수했어요");
-      setMenu(false);
-    } catch (e) {
-      flash((e as Error).message);
-    }
-  };
-
-  const block = async () => {
-    try {
-      await api.block(partner.id);
-      setMenu(false);
-      await onChanged();
-      flash(t("{name}님을 차단했어요.", { name: partner.name }));
-      onBack();
-    } catch (e) {
-      flash((e as Error).message);
-    }
-  };
-
   return (
     <div className="chat">
-      <div className="chathead">
-        <button className="back" onClick={onBack} aria-label={t("대화 목록으로")}>
-          ‹
-        </button>
-        <div className="who grow">
-          <Avatar name={partner.name} />
-          <div>
-            <b>{partner.name}</b>
-            <span className="m">{partner.bio || t("연락처 공개 없이 대화해요")}</span>
-            {partner.bio && <TranslateButton text={partner.bio} />}
-          </div>
-        </div>
-        <button className="link" onClick={() => setMenu((v) => !v)}>
-          {t("신고·차단")}
-        </button>
-      </div>
-
-      {menu && (
-        <div className="menu">
-          <span className="hint" style={{ width: "100%" }}>
-            {t("신고 사유를 고르거나 차단할 수 있어요.")}
-          </span>
-          {REPORT_REASONS.map((r) => (
-            <button key={r} className="btn ghost small" onClick={() => report(r)}>
-              {t("신고:")} {t(r)}
-            </button>
-          ))}
-          <button className="btn small" onClick={block}>
-            {t("차단하기")}
-          </button>
-        </div>
-      )}
-
       <ActivityPin matchId={matchId} partnerName={partner.name} onSend={send} goNote={goNote} />
 
       <div className="log">
@@ -216,7 +159,13 @@ export default function ChatPage({ me, active, onBack, onChanged, flash, goNote 
       </div>
 
       <div className="chatfoot">
+        {picked.length > 0 && <p className="picked-label">{t("준비에서 가져온 질문")}</p>}
         <div className="quick-replies">
+          {picked.map((q) => (
+            <button key={q} className="chip picked-q" onClick={() => send(q)}>
+              {q}
+            </button>
+          ))}
           {QUICK.map((q) => (
             <button key={q} className="chip" onClick={() => send(t(q))}>
               {t(q)}

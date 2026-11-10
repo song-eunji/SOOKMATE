@@ -10,11 +10,15 @@ interface Props {
   onPick: (id: number) => void;
   goRec: () => void;
   goNote: () => void;
+  goChat?: () => void;
   flash: (msg: string) => void;
+  /** 눌러서 대화로 가져갈 질문 (상대별로 App 이 들고 있어서 대화 탭과 같이 쓴다) */
+  picked?: string[];
+  onPicked?: (qs: string[]) => void;
 }
 
-export default function BriefPage({ active, confirmed, onPick, goRec, goNote, flash }: Props) {
-  const { t, lang } = useI18n();
+export default function BriefPage({ active, confirmed, onPick, goRec, goNote, goChat, flash, picked = [], onPicked }: Props) {
+  const { t, tv, lang } = useI18n();
   const [brief, setBrief] = useState<Brief | null>(null);
   const [card, setCard] = useState<ActivityCard | null>(null);
   const matchId = active?.id ?? null;
@@ -35,91 +39,121 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, fl
     return <Lock title={t("브리핑은 만남이 확정되면 보여요")} text={t("추천 탭에서 먼저 상대를 수락해 보세요.")} action={t("추천 보러 가기")} onAction={goRec} />;
   }
   const name = active.partner.name;
+  const e = active.explain;
+  const myTopic = e.my_topic ?? card?.mine.topic;
+  const theirTopic = e.partner_topic ?? card?.theirs.topic;
+  const togglePick = (q: string) => onPicked?.(picked.includes(q) ? picked.filter((x) => x !== q) : [...picked, q]);
 
   return (
     <>
       <MatchPicker matches={confirmed} activeId={active.id} onPick={onPick} />
-      <div>
-        <h1>{t("{name}님을 만나기 전에", { name })}</h1>
-        <p className="lead">{t("개인 선호가 문화 일반 정보보다 우선이에요. 국적으로 성향을 추정하지 않아요.")}</p>
-      </div>
-
-      {!brief && <div className="banner wait"><span className="spin" />{t("브리핑을 준비하는 중이에요.")}</div>}
-
-      {brief && (
-        <>
-          <section className="sec">
-            <h2>{t("{name}님이 공개한 선호", { name })}</h2>
-            {brief.prefs.length ? (
-              <div className="chips">
-                {brief.prefs.map((p) => (
-                  <span className="tag" key={p}>
-                    {p}
-                  </span>
-                ))}
-                <TranslateButton text={brief.prefs.join(" / ")} />
-              </div>
-            ) : (
-              <p className="hint">{t("공개한 선호가 없어요. 직접 물어보면 좋아요.")}</p>
-            )}
-          </section>
-
-          <section className="sec">
-            <h2>{t("참고할 문화 정보")}</h2>
-            {brief.tips.length ? (
-              <ul className="list">
-                {brief.tips.map((tip) => (
-                  <li key={tip.source_id}>
-                    {tip.text}
-                    <small>{t("출처 · {source}", { source: tip.source })}</small>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="hint">{brief.note && t(brief.note)}</p>
-            )}
-            {brief.mode === "fallback" && <p className="hint" style={{ marginTop: 6 }}>{t("AI가 만든 문장이 아니라 검토 자료를 그대로 보여주는 기본 안내예요.")}</p>}
-          </section>
-
-          <section className="sec">
-            <h2>{t("직접 물어볼 만한 질문")}</h2>
-            <ul className="list q">
-              {brief.questions.map((q) => (
-                <li key={q}>{q}</li>
-              ))}
-            </ul>
-          </section>
-        </>
-      )}
-
-      {card && (
+      <div className="brief-scroll">
         <section className="sec">
-          <h2>{t("서로 하나씩 알려주기")}</h2>
-          <div className="act">
-            <h3>{card.title}</h3>
-            <div className="swap">
+          <h2>{t("이번 만남에서 서로 알려줄 것")}</h2>
+          {myTopic || theirTopic ? (
+            <div className="swap slim">
               <div className="a">
-                <small>{t("나 · {n}분", { n: card.mine.minutes })}</small>
-                <b>{card.mine.topic}</b>
-                <div style={{ marginTop: 4 }}>{card.mine.desc}</div>
+                <b>{myTopic ? tv(myTopic) : t("정해지지 않았어요")}</b>
               </div>
-              <span className="x">⇄</span>
+              <span className="x" aria-hidden="true">⇄</span>
               <div className="b">
-                <small>
-                  {t("{name} · {n}분", { name, n: card.theirs.minutes })}
-                </small>
-                <b>{card.theirs.topic}</b>
-                <div style={{ marginTop: 4 }}>{card.theirs.desc}</div>
+                <b>{theirTopic ? tv(theirTopic) : t("정해지지 않았어요")}</b>
               </div>
             </div>
-            <p className="hint">{t("국적이 아니라 각자 고른 주제로 역할이 정해져요.")}{card.mode === "fallback" ? ` ${t("(기본 카드)")}` : ""}</p>
+          ) : (
+            <p className="hint">{t("정해지지 않았어요")}</p>
+          )}
+          {card && (
+            <p className="hint">
+              {card.title}
+              {card.mode === "fallback" ? ` ${t("(기본 카드)")}` : ""}
+            </p>
+          )}
+        </section>
+
+        <section className="sec">
+          <h2>{t("이야기 나눌 만한 공통점")}</h2>
+          <div className="chips">
+            {e.common_interests.map((v) => (
+              <span className="tag" key={v}>
+                {tv(v)}
+              </span>
+            ))}
+            {(e.similar_interests ?? []).map((x) => (
+              <span className="tag" key={`${x.mine}-${x.theirs}`}>
+                {tv(x.mine)} ≈ {tv(x.theirs)}
+              </span>
+            ))}
+            {e.common_interests.length + (e.similar_interests?.length ?? 0) === 0 && <span className="hint">{t("겹치는 관심사가 없어요")}</span>}
           </div>
         </section>
-      )}
 
-      <button className="btn" onClick={goNote}>
-        {t("만난 뒤 교류 노트 쓰기")}
-      </button>
+        {!brief && (
+          <div className="banner wait">
+            <span className="spin" />
+            {t("브리핑을 준비하는 중이에요.")}
+          </div>
+        )}
+
+        {brief && (
+          <>
+            <section className="sec">
+              <h2>{t("물어볼 질문 · 눌러서 대화로 가져가요")}</h2>
+              <div className="qlist">
+                {brief.questions.map((q) => {
+                  const on = picked.includes(q);
+                  return (
+                    <button key={q} type="button" className={`q ${on ? "on" : ""}`} aria-pressed={on} onClick={() => togglePick(q)}>
+                      {on && <i>{t("선택됨")}</i>}
+                      {q}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="sec">
+              <h2>{t("{name}님이 알려준 것", { name })}</h2>
+              {brief.prefs.length ? (
+                <div className="avoid">
+                  {brief.prefs.map((p) => (
+                    <span key={p}>{p}</span>
+                  ))}
+                  <TranslateButton text={brief.prefs.join(" / ")} />
+                </div>
+              ) : (
+                <p className="hint">{t("공개한 선호가 없어요. 직접 물어보면 좋아요.")}</p>
+              )}
+              <p className="hint">{t("개인 선호가 문화 일반 정보보다 우선이에요. 국적으로 성향을 추정하지 않아요.")}</p>
+            </section>
+
+            {brief.tips.length > 0 && (
+              <section className="sec">
+                <h2>{t("참고할 문화 정보")}</h2>
+                <ul className="list">
+                  {brief.tips.map((tip) => (
+                    <li key={tip.source_id}>
+                      {tip.text}
+                      <small>{t("출처 · {source}", { source: tip.source })}</small>
+                    </li>
+                  ))}
+                </ul>
+                {brief.mode === "fallback" && <p className="hint">{t("AI가 만든 문장이 아니라 검토 자료를 그대로 보여주는 기본 안내예요.")}</p>}
+              </section>
+            )}
+          </>
+        )}
+
+        <button className="link center" onClick={goNote}>
+          {t("만난 뒤 교류 노트 쓰기")}
+        </button>
+      </div>
+
+      <div className="dock">
+        <button className="btn" onClick={goChat ?? goNote}>
+          {t("대화에서 질문하기")}
+        </button>
+      </div>
     </>
   );
 }
