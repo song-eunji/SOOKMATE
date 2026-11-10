@@ -3,15 +3,6 @@ import { api } from "../api";
 import { Avatar, TranslateButton } from "../components";
 import { useI18n } from "../i18n";
 
-/** 점수를 도장처럼 찍어 보여준다 */
-function ScoreStamp({ value }: { value: number }) {
-  const { t } = useI18n();
-  return (
-    <div className="stamp" role="img" aria-label={t("{value}점", { value })}>
-      <b>{value}</b>
-    </div>
-  );
-}
 import type { MatchView, Me, Options } from "../types";
 
 interface Props {
@@ -87,7 +78,6 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
                     <b>{p.name}</b>
                     <span className="m">{[p.dept, p.langs.join(", ")].filter(Boolean).join(" · ")}</span>
                   </div>
-                  <ScoreStamp value={m.score.total} />
                 </div>
                 {p.bio && (
                   <p className="bio">

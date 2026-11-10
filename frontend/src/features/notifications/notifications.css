@@ -1,8 +1,8 @@
 .notification-header-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .notification-header-actions .dev select { max-width: 110px; }
-.notification-trigger { position: relative; flex: none; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); color: var(--accent-ink); }
+.notification-trigger { position: relative; flex: none; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 1px solid var(--line); border-radius: 15px; background: transparent; color: var(--muted); }
 .notification-trigger:hover { background: var(--accent-soft); }
-.notification-badge { position: absolute; right: -5px; top: -5px; min-width: 19px; height: 19px; padding: 0 4px; display: grid; place-items: center; border: 2px solid var(--bg); border-radius: 99px; background: var(--warm-ink); color: white; font-size: 10px; line-height: 1; font-weight: 700; }
+.notification-badge { position: absolute; right: -5px; top: -5px; min-width: 19px; height: 19px; padding: 0 4px; display: grid; place-items: center; border: 2px solid var(--bg); border-radius: 99px; background: #c43c3c; color: white; font-size: 10px; line-height: 1; font-weight: 700; }
 .notification-dialog { width: min(440px, calc(100% - 16px)); max-height: min(80dvh, 680px); margin: auto auto 0; padding: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 26px 26px 0 0; background: var(--surface); color: var(--ink); box-shadow: 0 18px 70px rgba(28, 37, 64, .22); overflow: hidden; }
 .notification-dialog[open] { display: flex; flex-direction: column; }
 .notification-dialog::backdrop { background: rgba(28, 37, 64, .34); }
