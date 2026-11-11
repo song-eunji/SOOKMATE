@@ -72,37 +72,62 @@ export default function ChatPage({ me, active, onChanged, flash, goNote, picked 
   const endRef = useRef<HTMLDivElement | null>(null);
   const matchId = active.id;
 
-  // 방을 보고 있는 동안 도착한 메시지는 바로 읽음 처리한다
-  const markRead = () => {
-    api.markRead(matchId).then(onChanged).catch(() => undefined);
-  };
-
   useEffect(() => {
+    let alive = true;
+    let partnerReadThrough = 0;
+    const visible = () => document.visibilityState === "visible" && document.hasFocus();
+    const markRead = () => {
+      if (!alive || !visible()) return;
+      api.markRead(matchId).then(() => { if (alive) return onChanged(); }).catch(() => undefined);
+    };
+    // 조회 응답과 실시간 메시지가 겹쳐도 누락되거나 읽음이 되돌아가지 않게 합친다.
+    const merge = (rows: ChatMessage[]) => {
+      if (!alive) return;
+      setMsgs((previous) => {
+        const merged = new Map(previous.map((message) => [message.id, message]));
+        for (const message of rows) {
+          const old = merged.get(message.id);
+          merged.set(message.id, { ...message, read: Boolean(message.read || old?.read || (message.sender_id === me.id && message.id <= partnerReadThrough)) });
+        }
+        return [...merged.values()].sort((a, b) => a.id - b.id);
+      });
+    };
+    const refresh = () => {
+      if (!alive) return;
+      api.messages(matchId).then((rows) => { merge(rows); markRead(); })
+        .catch((e) => { if (alive) flash((e as Error).message); });
+    };
+    const onVisible = () => { if (visible()) refresh(); };
     setMsgs([]);
-    api
-      .messages(matchId)
-      .then((rows) => {
-        setMsgs(rows);
-        markRead();
-      })
-      .catch((e) => flash((e as Error).message));
     const sock = new WebSocket(wsUrl(matchId));
-    sock.onmessage = (ev) => {
-      const data = JSON.parse(ev.data) as WsEvent;
+    sock.onopen = refresh;
+    sock.onmessage = (event) => {
+      if (!alive) return;
+      let data: WsEvent;
+      try { data = JSON.parse(event.data) as WsEvent; } catch { return; }
       if (data.type === "read") {
-        // 상대가 읽었으면 내가 보낸 메시지를 읽음으로 바꾼다
-        if (data.reader_id !== me.id) setMsgs((prev) => prev.map((x) => (x.sender_id === me.id && x.id <= data.last_read_id ? { ...x, read: true } : x)));
+        if (data.reader_id !== me.id) {
+          partnerReadThrough = Math.max(partnerReadThrough, data.last_read_id);
+          setMsgs((previous) => previous.map((message) => message.sender_id === me.id && message.id <= partnerReadThrough ? { ...message, read: true } : message));
+        }
         return;
       }
-      setMsgs((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      if (data.type !== "message") return;
+      merge([data]);
       if (data.sender_id !== me.id) markRead();
     };
+    refresh();
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
     ws.current = sock;
     return () => {
+      alive = false;
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
       sock.close();
       if (ws.current === sock) ws.current = null;
     };
-  }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [matchId, me.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "nearest" });
@@ -140,7 +165,7 @@ export default function ChatPage({ me, active, onChanged, flash, goNote, picked 
             <div key={m.id} className={`line ${mine ? "me" : "them"}`}>
               {mine && (
                 <span className="meta">
-                  <span className={m.read ? "seen" : "unseen"}>{m.read ? t("읽음") : t("안 읽음")}</span>
+                  {!m.read && <span className="unseen" aria-label={t("안 읽음")} title={t("안 읽음")}>1</span>}
                   <time>{clock(m.created_at)}</time>
                 </span>
               )}

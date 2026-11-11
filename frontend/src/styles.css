@@ -233,7 +233,7 @@ h2.plain { margin-bottom: 10px; }
 .line .msg { max-width: none; min-width: 0; }
 .meta { display: flex; flex-direction: column; font-size: 11px; line-height: 1.3; color: var(--muted); flex: none; }
 .line.me .meta { align-items: flex-end; }
-.meta .unseen { color: var(--accent-ink); font-weight: 700; }
+.meta .unseen { color: var(--accent-ink); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* 대화방: 화면을 가득 채우고 메시지 영역만 스크롤 */
 .app.chatmode { height: 100dvh; min-height: 0; }
