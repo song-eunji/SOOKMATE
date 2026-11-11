@@ -9,6 +9,29 @@ type Tr = [string, string, string, string];
 const COLUMN: Record<Exclude<Lang, "ko">, number> = { en: 0, ja: 1, zh: 2, vi: 3 };
 
 const D: Record<string, Tr> = {
+  // 만남 약속
+  "만남 약속": ["Meetup", "会う約束", "见面安排", "Lịch gặp"],
+  "한국 시간 기준": ["Korea time", "韓国時間", "韩国时间", "Giờ Hàn Quốc"],
+  "약속이 확정됐어요": ["Your meetup is confirmed", "約束が確定しました", "见面已确认", "Đã xác nhận lịch gặp"],
+  "상대의 수락을 기다리고 있어요": ["Waiting for your partner to accept", "相手の承諾を待っています", "等待对方接受", "Đang chờ đối phương đồng ý"],
+  "상대가 만남 시간을 제안했어요": ["Your partner proposed a time", "相手が会う時間を提案しました", "对方提议了见面时间", "Đối phương đã đề xuất giờ gặp"],
+  "이 시간에 만나요": ["Let's meet then", "この時間に会いましょう", "就这个时间见面", "Gặp vào giờ này nhé"],
+  "약속 취소": ["Cancel meetup", "約束を取り消す", "取消见面", "Hủy lịch gặp"],
+  "제안 취소": ["Withdraw proposal", "提案を取り消す", "撤回提议", "Rút đề xuất"],
+  "날짜": ["Date", "日付", "日期", "Ngày"],
+  "날짜 선택": ["Choose a date", "日付を選ぶ", "选择日期", "Chọn ngày"],
+  "시간": ["Time", "時間", "时间", "Giờ"],
+  "시간 선택": ["Choose a time", "時間を選ぶ", "选择时间", "Chọn giờ"],
+  "시간 제안하기": ["Propose a time", "時間を提案する", "提议时间", "Đề xuất giờ"],
+  "지난 약속 이후 다음 만남을 정해 보세요": ["Plan your next meetup", "次の約束を決めましょう", "安排下一次见面吧", "Lên lịch gặp tiếp theo"],
+  "상대가 제안을 거절했어요. 다른 시간을 골라 보세요": ["Your partner declined. Try another time.", "提案が断られました。別の時間を選んでください。", "对方拒绝了提议，请选择其他时间。", "Đối phương đã từ chối. Hãy chọn giờ khác."],
+  "약속이 취소됐어요. 다시 제안할 수 있어요": ["Meetup cancelled. You can propose again.", "約束が取り消されました。再提案できます。", "见面已取消，可以重新提议。", "Lịch gặp đã hủy. Bạn có thể đề xuất lại."],
+  "겹치는 시간으로 약속을 잡아 보세요": ["Plan a meetup when you are both free", "共通の空き時間で約束しましょう", "选择双方空闲的时间见面", "Chọn giờ cả hai đều rảnh để gặp"],
+  "앞으로 2주 안에 겹치는 시간이 없어요. 프로필의 가능 시간을 확인해 주세요.": ["No shared times in the next two weeks. Check your profile availability.", "今後2週間に共通の空き時間がありません。プロフィールの空き時間を確認してください。", "未来两周没有共同空闲时间，请检查个人资料中的可用时间。", "Hai tuần tới chưa có giờ rảnh chung. Hãy kiểm tra thời gian trong hồ sơ."],
+  "약속 상태가 바뀌었어요. 다시 확인해 주세요.": ["The meetup changed. Please check again.", "約束の状態が変わりました。再確認してください。", "见面状态已更改，请重新确认。", "Trạng thái lịch gặp đã đổi. Hãy kiểm tra lại."],
+  "두 사람의 공통 가능한 미래 시간을 선택해 주세요.": ["Choose a future time when both of you are available.", "二人とも空いている今後の時間を選んでください。", "请选择双方空闲的未来时间。", "Chọn giờ sắp tới mà cả hai đều rảnh."],
+  "지난 시간이거나 가능한 시간이 바뀌었어요. 다시 제안해 주세요.": ["This time has passed or availability changed. Please propose again.", "過去の時間か空き時間が変わりました。再提案してください。", "时间已过或可用时间已变更，请重新提议。", "Giờ đã qua hoặc thời gian rảnh đã đổi. Hãy đề xuất lại."],
+
   // 탭, 공통
   "겹치는 것": ["In common", "共通すること", "共同点", "Điểm chung"],
   점: ["pts", "点", "分", "điểm"],
@@ -185,7 +208,7 @@ const D: Record<string, Tr> = {
   "다음 활동 추천": ["Next activity suggestion", "次のアクティビティのおすすめ", "下次活动推荐", "Gợi ý hoạt động tiếp theo"],
   "접기 ▲": ["Collapse ▲", "閉じる ▲", "收起 ▲", "Thu gọn ▲"],
   "펼치기 ▼": ["Expand ▼", "開く ▼", "展开 ▼", "Mở rộng ▼"],
-  "채팅에 제안을 보냈어요 ✓": ["Suggestion sent in chat ✓", "チャットで提案しました ✓", "已在聊天中发送提议 ✓", "Đã gửi đề xuất trong chat ✓"],
+  "채팅에 제안을 보냈어요": ["Suggestion sent in chat", "チャットで提案しました", "已在聊天中发送提议", "Đã gửi đề xuất trong chat"],
   "{name}님에게 이 활동 제안하기": ["Suggest this activity to {name}", "{name}さんにこのアクティビティを提案する", "向{name}提议这个活动", "Đề xuất hoạt động này cho {name}"],
   "노트에서 다른 추천 받기 · 근거 자료 보기 →": ["Get another suggestion or see sources in Notes →", "ノートで別のおすすめ・根拠資料を見る →", "在笔记中获取其他推荐 · 查看依据资料 →", "Nhận gợi ý khác · xem tài liệu trong Ghi chép →"],
   "예: '아이스 아메리카노 한 잔 주세요'라는 주문 표현": ["e.g. How to order: \"One iced Americano, please\"", "例：「アイスアメリカーノを一つください」という注文表現", "例如：“请给我一杯冰美式”这样的点单说法", "Ví dụ: câu gọi món \"Cho tôi một ly Americano đá\""],

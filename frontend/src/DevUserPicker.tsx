@@ -1,3 +1,4 @@
+import Icon from "./Icon";
 import "./DevUserPicker.css";
 import { useId, useRef, useState } from "react";
 import type { UserLite } from "./types";
@@ -28,7 +29,7 @@ export default function DevUserPicker({ users, value, onChange }: { users: UserL
               <li key={user.id}>
                 <button type="button" aria-current={user.id === value ? "true" : undefined} onClick={() => { onChange(user.id); dialog.current?.close(); }}>
                   <span>{user.name}<small>{user.kind === "domestic" ? "국내" : "유학생"}</small></span>
-                  {user.id === value && <span aria-label="현재 사용자">✓</span>}
+                  {user.id === value && <span aria-label="현재 사용자"><Icon name="check" size={16} /></span>}
                 </button>
               </li>
             ))}

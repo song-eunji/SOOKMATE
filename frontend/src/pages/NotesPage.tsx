@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api, compareActivities, generateActivity, loadActivity } from "../api";
 import ActivityResults from "./ActivityResults";
@@ -147,7 +148,7 @@ export default function NotesPage({active, confirmed, onPick, goRec, goChat, fla
     {loading ? <p role="status">{t("우리 기록을 불러오는 중이에요…")}</p> : <>
       <section className="notes-panel"><div className="notes-section-head"><h2><span className="notes-num" aria-hidden="true">1</span>{t("내 기록")}</h2>{mine && <button className="link" onClick={openEditor}>{t("수정하기")}</button>}</div>
         {mine ? <div className="notes-entries">{FIELDS.filter((f) => mine[f.key].trim()).map((f) => <article key={f.key}><div className="notes-entry-label"><span>{t(f.label)}</span><small className={mine[f.share] ? "note-shared" : "note-private"}>{mine[f.share] ? t("공유함 · 추천에 사용") : t("나만 보기 · 추천에 안 씀")}</small></div><p>{mine[f.key]}</p></article>)}</div>
-        : <div className="notes-empty"><span aria-hidden="true">✎</span><h3>{t("오늘 서로 무엇을 배웠나요?")}</h3><p>{t("짧은 한 문장이면 충분해요.")}<br />{t("공유할 내용은 직접 고를 수 있어요.")}</p><button className="btn" onClick={openEditor}>{t("기록 남기기")}</button></div>}
+        : <div className="notes-empty"><span aria-hidden="true"><Icon name="note" size={30} /></span><h3>{t("오늘 서로 무엇을 배웠나요?")}</h3><p>{t("짧은 한 문장이면 충분해요.")}<br />{t("공유할 내용은 직접 고를 수 있어요.")}</p><button className="btn" onClick={openEditor}>{t("기록 남기기")}</button></div>}
       </section>
       <section className="notes-panel"><h2>{t("{name}님이 공유한 기록", { name })}</h2>{theirsShared ? <div className="notes-entries">{FIELDS.filter((f) => theirs?.[f.key]).map((f) => <article key={f.key}><small>{t(f.label)}</small><p>{theirs?.[f.key]}</p><TranslateButton text={theirs?.[f.key] ?? ""} /></article>)}</div> : <p className="notes-muted">{t("아직 {name}님이 공유한 기록이 없어요. 내 기록만 있어도 추천받을 수 있어요.", { name })}</p>}</section>
 
@@ -156,7 +157,7 @@ export default function NotesPage({active, confirmed, onPick, goRec, goChat, fla
         {!sharedCount ? <p>{hasMine ? t("공유한 기록이 없어요. 기록을 수정해서 추천에 쓸 항목을 공유해 주세요.") : t("먼저 위에 기록을 남기고 공유를 켜 주세요.")}</p>
         : stored ? <>
           <h2>{stored.retrieval.title}</h2>
-          <div className="chips">{stored.retrieval.minutes && <span className="chip">⏱ {t("{n}분", { n: stored.retrieval.minutes })}</span>}{stored.retrieval.prep && <span className="chip">{t("준비물")} · {stored.retrieval.prep}</span>}</div>
+          <div className="chips">{stored.retrieval.minutes && <span className="chip"><Icon name="clock" /> {t("{n}분", { n: stored.retrieval.minutes })}</span>}{stored.retrieval.prep && <span className="chip">{t("준비물")} · {stored.retrieval.prep}</span>}</div>
           <p>{stored.retrieval.desc}</p>
           <button className="btn" onClick={openActivity}>{t("자세히 보고 {name}님에게 제안하기", { name })} <span aria-hidden="true">→</span></button>
         </> : <>
@@ -164,7 +165,7 @@ export default function NotesPage({active, confirmed, onPick, goRec, goChat, fla
           <button className="btn" onClick={() => void recommend("activity")}>{t("다음 활동 추천받기")} <span aria-hidden="true">→</span></button>
         </>}
         {sharedCount > 0 && <button className="notes-experiment-link" onClick={openCompare}>
-          <strong>🔬 {t("자료를 찾아본 게 도움이 됐을까?")}</strong>
+          <strong><Icon name="flask" /> {t("자료를 찾아본 게 도움이 됐을까?")}</strong>
           <span>{t("같은 기록으로 자료 없이 만든 추천과 나란히 비교해요.")}</span>
         </button>}
       </section>

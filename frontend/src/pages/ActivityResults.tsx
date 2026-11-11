@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { ActivitySource, GeneratedActivity, SavedActivity } from "../types";
@@ -48,7 +49,7 @@ export function ActivityBody({activity}: {activity: GeneratedActivity}) {
   return <>
     <h3>{activity.title}</h3>
     <div className="chips">
-      {activity.minutes && <span className="chip">⏱ {activity.minutes}분</span>}
+      {activity.minutes && <span className="chip"><Icon name="clock" /> {activity.minutes}분</span>}
       {activity.prep && <span className="chip">준비물 · {activity.prep}</span>}
     </div>
     <p>{activity.desc}</p>
@@ -90,9 +91,9 @@ export default function ActivityResults({matchId, partnerName, stored, onRegener
     <label className="hint" htmlFor="activity-message">편하게 고쳐서 보내세요. 보내기를 눌러야 채팅으로 전송돼요.</label>
     <textarea ref={messageInput} id="activity-message" maxLength={500} rows={9} value={draft} disabled={sending || sent} onChange={(e) => setDraft(e.target.value)} />
     <small>{draft.length} / 500</small>
-    <button type="button" className="btn" disabled={sending || sent || !draft.trim()} onClick={send}>{sent ? "채팅으로 제안을 보냈어요 ✓" : sending ? "보내는 중…" : "채팅으로 제안 보내기"}</button>
+    <button type="button" className="btn" disabled={sending || sent || !draft.trim()} onClick={send}>{sent && <Icon name="check" />} {sent ? "채팅으로 제안을 보냈어요" : sending ? "보내는 중…" : "채팅으로 제안 보내기"}</button>
     {sent && <><p role="status" className="banner ok">채팅으로 보냈어요. {partnerName}님의 답은 대화방에서 확인할 수 있어요.</p>
-      <button type="button" className="btn ghost" onClick={onGoChat}>💬 {partnerName}님과의 대화방으로 가기 →</button></>}
+      <button type="button" className="btn ghost" onClick={onGoChat}><Icon name="chat" /> {partnerName}님과의 대화방으로 가기 →</button></>}
     {error && <p role="alert" className="banner err">{error}</p>}
   </section>;
 
@@ -106,7 +107,7 @@ export default function ActivityResults({matchId, partnerName, stored, onRegener
       <button type="button" className="btn" onClick={() => {
         setDraft(proposalText(result));
         setSent(false); setError(""); setComposerOpen(true);
-      }}>💬 {partnerName}님에게 채팅으로 제안하기</button>
+      }}><Icon name="chat" /> {partnerName}님에게 채팅으로 제안하기</button>
       <div className="row"><button type="button" className="btn ghost small" onClick={onRegenerate}>↻ 다른 활동 추천받기</button></div>
     </article>
 
@@ -141,7 +142,7 @@ export default function ActivityResults({matchId, partnerName, stored, onRegener
     </details>
 
     <button className="notes-experiment-link" onClick={onCompare}>
-      <strong>🔬 자료 없이 만들었다면 어땠을까?</strong>
+      <strong><Icon name="flask" /> 자료 없이 만들었다면 어땠을까?</strong>
       <span>{stored.baseline ? "비교 결과 보기" : "같은 기록으로 자료 없이 만든 추천과 나란히 비교해요 (AI 호출 2회 추가)"}</span>
     </button>
     {error && <p role="alert" className="banner err">{error}</p>}

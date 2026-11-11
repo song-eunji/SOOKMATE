@@ -17,6 +17,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from . import ai, auth, matching, views
+from .appointments import create_router as create_appointments_router
 from .constants import BIO_MAX_LEN, LEGACY_HOURS, expand_times, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
 from .db import Base, SessionLocal, engine, ensure_columns, get_db
 from .models import ChatRead, Match, Message, Note, Report, User
@@ -104,6 +105,7 @@ def me_dep(
 
 
 app.include_router(create_notifications_router(me_dep))
+app.include_router(create_appointments_router(me_dep))
 
 
 def run(fn, *args):

@@ -8,7 +8,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from .constants import DAYS, DEFAULT_WEEKLY_CAP, expand_times
-from .models import AuthToken, Block, ChatRead, Match, Message, Note, Report, User
+from .models import Appointment, AuthToken, Block, ChatRead, Match, Message, Note, Report, User
 
 ALL = "월화수목금:오전오후저녁"
 
@@ -186,7 +186,7 @@ def replace_personas(db: Session) -> dict:
         in_match = or_(Match.domestic_id.in_(fake), Match.international_id.in_(fake))
         match_ids = set(db.scalars(select(Match.id).where(in_match)))
         if match_ids:
-            for model in (Message, Note, ChatRead, Report):
+            for model in (Appointment, Message, Note, ChatRead, Report):
                 db.execute(delete(model).where(model.match_id.in_(match_ids)))
             db.execute(delete(Match).where(Match.id.in_(match_ids)))
         db.execute(delete(Report).where(or_(Report.reporter_id.in_(fake), Report.target_id.in_(fake))))

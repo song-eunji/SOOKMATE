@@ -1,3 +1,4 @@
+import AppointmentCard from "./AppointmentCard";
 import { useState, type ReactNode } from "react";
 import { api } from "../api";
 import { Avatar, TranslateButton } from "../components";
@@ -93,6 +94,8 @@ export default function RoomView({ active, sub, onSub, onBack, onChanged, flash,
           </button>
         ))}
       </div>
+
+      {sub === "chat" && <AppointmentCard key={active.id} matchId={active.id} />}
 
       <div className={`roombody ${sub}`}>{children}</div>
     </div>

@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import { Avatar, Chip, TagInput } from "../components";
@@ -114,7 +115,7 @@ export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Prop
                 <small>{t("알려줄 수 있어요")}</small>
                 {f.teach.length ? f.teach.map((v) => <b key={v}>{tv(v)}</b>) : <span className="none">{t("아직 없어요")}</span>}
               </div>
-              <span className="x" aria-hidden="true">⇄</span>
+              <span className="x" aria-hidden="true"><Icon name="swap" size={16} /></span>
               <div className="b">
                 <small>{t("배우고 싶어요")}</small>
                 {f.learn.length ? f.learn.map((v) => <b key={v}>{tv(v)}</b>) : <span className="none">{t("아직 없어요")}</span>}

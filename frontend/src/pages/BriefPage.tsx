@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { Lock, MatchPicker, TranslateButton } from "../components";
@@ -55,7 +56,7 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, go
               <div className="a">
                 <b>{myTopic ? tv(myTopic) : t("정해지지 않았어요")}</b>
               </div>
-              <span className="x" aria-hidden="true">⇄</span>
+              <span className="x" aria-hidden="true"><Icon name="swap" size={16} /></span>
               <div className="b">
                 <b>{theirTopic ? tv(theirTopic) : t("정해지지 않았어요")}</b>
               </div>
