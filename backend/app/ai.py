@@ -361,11 +361,57 @@ def default_questions(partner, ex: dict) -> list[str]:
     return qs[:3]
 
 
+def doc_text(doc: dict, lang: str) -> str:
+    """자료 문장을 읽는 사람의 언어로. 번역(text_i18n)이 없으면 한국어 원문."""
+    return (doc.get("text_i18n") or {}).get(lang) or doc["text"]
+
+
+def culture_country(partner) -> str | None:
+    """참고할 문화 정보가 다루는 나라.
+
+    상대가 유학생이면 읽는 사람은 국내 학생이므로 상대 나라의 문화를, 상대가 국내 학생이면
+    읽는 사람은 유학생이므로 한국 문화를 보여준다. 국적을 입력하지 않았으면 나라별 자료는 없다.
+    """
+    if getattr(partner, "kind", "") == "international":
+        return (getattr(partner, "nationality", None) or "").strip() or None
+    return "한국"
+
+
+def pick_culture_docs(partner, ex: dict, query: str, prefs: list[str], k: int = 3) -> list[dict]:
+    """읽는 사람에게 맞는 문화 자료 k개.
+
+    순서: ① 상대가 직접 적은 선호와 맞는 공통 자료 ② 나라별 자료 2개 ③ 공통 관심사와 맞는 공통 자료 ④ 남는 자리는 나라별 자료, 그다음 공통 자료.
+    """
+    country = culture_country(partner)
+    all_docs = culture_docs()
+    common = [d for d in all_docs if d.get("country", "공통") == "공통"]
+    local = [d for d in all_docs if country and d.get("country") == country]
+
+    similar = [p["theirs"] for p in ex.get("similar_interests", [])]
+    interests = " ".join(ex["common_interests"] + similar)
+
+    # 검색은 한 번만 한다. 근거가 있는 자료만 관련도 순으로 나오므로, 아래는 그 순서를 다시 배열할 뿐이다.
+    ranked = retrieve(query, k=len(local) + len(common), prefs=prefs, docs=local + common)
+    is_common = lambda d: d.get("country", "공통") == "공통"  # noqa: E731
+    by_pref = [d for d in ranked if is_common(d) and any(_keyword_hits(p, d) for p in prefs)]
+    by_interest = [d for d in ranked if is_common(d) and interests and _keyword_hits(interests, d)]
+    # 나라별 자료는 그 나라 사람을 만나는 것 자체가 관련이므로, 검색어에 안 걸려도 관련도 높은 것 뒤에 이어서 채운다.
+    by_country = [d for d in ranked if not is_common(d)] + [d for d in local if d not in ranked]
+
+    # 상대 선호 자료 1개를 맨 앞에 두되, 화면 제목이 나라 이름이므로 나라별 자료는 최소 2개를 보장한다.
+    picked: list[dict] = []
+    for d in by_pref[:1] + by_country[:2] + by_interest[:1] + by_country + ranked:
+        if d not in picked:
+            picked.append(d)
+    return picked[:k]
+
+
 def make_brief(me, partner, ex: dict) -> dict:
     prefs = list(partner.prefs or [])  # 개인 선호가 최우선. 사람이 입력한 값 그대로.
     similar = [p["theirs"] for p in ex.get("similar_interests", [])]
     query = " ".join(ex["common_interests"] + similar + ["첫 만남 대화 약속 장소"])
-    docs = retrieve(query, k=3, prefs=prefs)
+    docs = pick_culture_docs(partner, ex, query, prefs)
+    country = culture_country(partner)
 
     mode = "fallback"
     tips: list[dict] = []
@@ -389,6 +435,7 @@ def make_brief(me, partner, ex: dict) -> dict:
         data = llm_json(
             rules
             + "주어진 문서 안의 내용만 사용해서 짧은 안내와 첫 질문을 만들어. 문서에 없는 사실은 쓰지 마. "
+            "문서는 나라의 일반적인 문화 안내이므로 상대 개인이 그렇다고 단정하지 말고 '~경우가 많아요'처럼 써. "
             "선호와 관련된 문서가 있으면 그 안내를 먼저 써. source_id는 문서 id 그대로 둬. "
             '형식: {"tips":[{"text":"...","source_id":"문서 id"}],"questions":["..."]}',
             json.dumps(
@@ -428,17 +475,23 @@ def make_brief(me, partner, ex: dict) -> dict:
             questions = data["questions"]
             mode = "llm"
 
+    shown_lang = lang if mode == "llm" else "ko"
     if not tips:
-        tips = [{"text": d["text"], "source": d["source"], "source_id": d["id"]} for d in docs[:2]]
+        # AI 없이 자료를 그대로 보여줄 때도 읽는 사람의 언어 번역이 있으면 그걸 쓴다 (없으면 한국어 원문)
+        picked = docs[:3]
+        tips = [{"text": doc_text(d, lang), "source": d["source"], "source_id": d["id"]} for d in picked]
+        if lang != "ko" and all((d.get("text_i18n") or {}).get(lang) for d in picked):
+            shown_lang = lang
     if not questions:
         questions = default_questions(partner, ex)
 
     return {
         "prefs": prefs,
         "tips": tips,  # 문서가 없으면 빈 목록: 직접 확인할 질문만 보여줍니다.
+        "culture_country": country if any(d.get("country") == country for d in docs) else None,  # 화면 제목에 쓴다 (예: 일본)
         "questions": questions,
         "mode": mode,
-        "lang": lang if mode == "llm" else "ko",  # 문장이 어떤 언어로 나왔는지 (fallback 은 한국어 원문)
+        "lang": shown_lang,  # 문장이 어떤 언어로 나왔는지 (자료 번역이 없으면 한국어 원문)
         "note": None if tips else "참고할 자료가 없어서 직접 물어볼 질문만 보여드려요.",
     }
 

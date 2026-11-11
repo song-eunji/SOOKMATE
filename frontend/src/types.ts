@@ -114,6 +114,7 @@ export interface ChatRoom {
 export interface Brief {
   prefs: string[];
   tips: { text: string; source: string; source_id: string }[];
+  culture_country?: string | null;
   questions: string[];
   mode: "llm" | "fallback";
   note: string | null;
