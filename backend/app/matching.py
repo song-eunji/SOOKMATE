@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .ai import embed, sim, set_sim
-from .constants import PROPOSAL_TTL_HOURS, TIME_SLOTS, WEIGHTS
+from .constants import PROPOSAL_TTL_HOURS, TIME_SLOTS, WEIGHTS, expand_times
 from .models import Block, Match, User
 from .notifications.service import match_event
 from .scheduling.coordination import serialized
@@ -42,15 +42,15 @@ def hard_filter(a: User, b: User, blocked: set[frozenset]) -> bool:
         return False
     if frozenset((a.id, b.id)) in blocked:
         return False
-    return bool(common(a.times, b.times)) and bool(common(a.langs, b.langs))
+    return bool(common(expand_times(a.times), expand_times(b.times))) and bool(common(a.langs, b.langs))
 
 
 # --------------------------------------------------------------- 2단계: 점수
 def score_pair(a: User, b: User) -> dict:
     """I 관심사 유사도, T 공통 시간 비율, L 언어 교환 충족도, R 양방향 적합도. 국적·학과는 쓰지 않는다."""
     I = set_sim(a.interests, b.interests)
-    n = min(len(a.times), len(b.times))
-    T = len(common(a.times, b.times)) / n if n else 0.0
+    n = min(len(expand_times(a.times)), len(expand_times(b.times)))
+    T = len(common(expand_times(a.times), expand_times(b.times))) / n if n else 0.0
     ln = min(len(a.langs), len(b.langs))
     L = min(1.0, len(common(a.langs, b.langs)) / ln) if ln else 0.0
     R = (set_sim(a.teach, b.learn) + set_sim(b.teach, a.learn)) / 2
@@ -80,7 +80,7 @@ def explain(me: User, other: User) -> dict:
     ints = common(me.interests, other.interests)
     similar = similar_pairs(me.interests, other.interests)
     shown = ints + [f"{p['mine']}({p['theirs']})" for p in similar]
-    times = sorted(common(me.times, other.times), key=lambda t: TIME_SLOTS.index(t) if t in TIME_SLOTS else 99)
+    times = sorted(common(expand_times(me.times), expand_times(other.times)), key=lambda t: TIME_SLOTS.index(t) if t in TIME_SLOTS else 99)
     my_topic = (common(me.teach, other.learn) or [None])[0]
     partner_topic = (common(other.teach, me.learn) or [None])[0]
     mutual = bool(my_topic and partner_topic)

@@ -1,8 +1,23 @@
 """서비스 전체에서 같이 쓰는 선택지와 규칙 값. 프론트는 GET /api/options 로 이 값을 받아 씁니다."""
 
 DAYS = ["월", "화", "수", "목", "금"]
-SLOTS = ["오전", "오후", "저녁"]
+SLOTS = [f"{hour:02d}:00–{hour + 1:02d}:00" for hour in range(9, 22)]
+LEGACY_HOURS = {"오전": range(9, 12), "오후": range(12, 18), "저녁": range(18, 22)}
 TIME_SLOTS = [f"{d} {s}" for d in DAYS for s in SLOTS]
+
+
+def expand_times(values: list[str]) -> list[str]:
+    """기존 넓은 시간대를 명시된 범위의 1시간 슬롯으로 변환한다. DB 원본은 변경하지 않는다."""
+    result = set()
+    for value in values:
+        day, _, slot = value.partition(" ")
+        if day not in DAYS:
+            continue
+        if slot in LEGACY_HOURS:
+            result.update(f"{day} {hour:02d}:00–{hour + 1:02d}:00" for hour in LEGACY_HOURS[slot])
+        elif value in TIME_SLOTS:
+            result.add(value)
+    return [slot for slot in TIME_SLOTS if slot in result]
 
 # 관심사는 추천 칩일 뿐이고, 사용자가 직접 입력한 값도 받습니다.
 INTERESTS = ["카페", "맛집", "전시", "영화", "드라마", "독서", "사진", "음악", "K-pop", "러닝", "산책", "보드게임", "요리", "여행"]

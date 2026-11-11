@@ -17,7 +17,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from . import ai, auth, matching, views
-from .constants import BIO_MAX_LEN, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
+from .constants import BIO_MAX_LEN, LEGACY_HOURS, expand_times, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
 from .db import Base, SessionLocal, engine, ensure_columns, get_db
 from .models import ChatRead, Match, Message, Note, Report, User
 from .personas import PERSONAS
@@ -161,7 +161,7 @@ class ProfileIn(BaseModel):
     @field_validator("times")
     @classmethod
     def _t(cls, v):
-        return _only(v, TIME_SLOTS, "시간")
+        return expand_times(_only(v, TIME_SLOTS + [f"{d} {s}" for d in DAYS for s in LEGACY_HOURS], "시간"))
 
     @field_validator("langs")
     @classmethod

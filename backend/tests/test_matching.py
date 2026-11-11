@@ -4,6 +4,7 @@ from collections import Counter
 from sqlalchemy import select
 
 from app import matching
+from app.constants import expand_times
 from app.models import Match, User
 from app.util import week_of
 
@@ -130,7 +131,7 @@ def test_reason_only_uses_real_overlap(db):
     i = db.get(User, 17)  # 하루카
     ex = matching.explain(d, i)
     assert ex["common_interests"] == ["전시", "카페"]
-    assert sorted(ex["common_times"]) == sorted(["수 오후", "금 오전", "목 저녁"])
+    assert sorted(ex["common_times"]) == sorted(expand_times(["수 오후", "금 오전", "목 저녁"]))
     assert ex["mutual"] is True
     # 겹치는 게 없으면 없는 근거를 만들지 않는다
     d.interests, d.times, d.teach, d.learn = [], [], [], []

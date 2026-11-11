@@ -72,7 +72,7 @@ def test_every_time_slot_has_people_available(fresh):
 
 def test_busy_and_free_people_both_exist(fresh):
     counts = sorted(len(u.times) for u in people())
-    assert counts[0] <= 4 and counts[-1] >= 9
+    assert counts[0] <= 15 and counts[-1] >= 39  # 1시간 슬롯: 바쁜 프로필과 여유 있는 프로필
 
 
 def test_interests_are_varied(fresh):

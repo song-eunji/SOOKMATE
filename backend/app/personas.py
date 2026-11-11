@@ -7,7 +7,7 @@
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
-from .constants import DAYS, DEFAULT_WEEKLY_CAP
+from .constants import DAYS, DEFAULT_WEEKLY_CAP, expand_times
 from .models import AuthToken, Block, ChatRead, Match, Message, Note, Report, User
 
 ALL = "월화수목금:오전오후저녁"
@@ -21,7 +21,7 @@ def T(spec: str) -> list[str]:
         for d in DAYS:
             if d in days:
                 out += [f"{d} {s}" for s in ("오전", "오후", "저녁") if s in slots]
-    return out
+    return expand_times(out)
 
 
 def P(name, kind, dept, bio, langs, interests, times, teach, learn, prefs=(), nat=None, ui="ko"):

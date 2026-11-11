@@ -367,6 +367,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const tv: I18n["tv"] = (value) => {
       if (lang === "ko") return value;
       if (D[value]) return t(value);
+      const hourly = value.match(/^([월화수목금]) (\d{2}:00–\d{2}:00)$/);
+      if (hourly) return `${t(hourly[1])} ${hourly[2]}`;
       const parts = value.split(" ");
       return parts.length > 1 && parts.every((p) => D[p]) ? parts.map((p) => t(p)).join(" ") : value;
     };

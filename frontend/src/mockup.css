@@ -357,3 +357,11 @@ nav button.on svg { stroke-width: 2.3; }
 .subtabs button.on::after { background: var(--accent); }
 .roomhead, .subtabs { background: #fff; }
 .login-form .btn { border-radius: 12px; font-weight: 500; }
+
+/* 가능한 시간은 다른 선택 컨트롤과 같은 하늘색을 사용한다. */
+.tgrid .tcell.on { background: var(--btn); color: var(--btn-ink); box-shadow: inset 0 0 0 1px #76a8e5; }
+.tgrid .tcell.on::after { content: "✓"; color: var(--btn-ink); font-size: 14px; }
+.tgrid .rh { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tgrid .day-toggle { min-height: 40px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; color: var(--muted); }
+.tgrid .day-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.tgrid .tcell { min-height: 40px; }

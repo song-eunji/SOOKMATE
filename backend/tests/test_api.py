@@ -20,7 +20,7 @@ def confirm(client, uid=1):
 
 def test_options_and_me(client):
     o = client.get("/api/options").json()
-    assert len(o["time_slots"]) == 15 and abs(sum(o["weights"].values()) - 1) < 1e-9
+    assert len(o["time_slots"]) == 65 and abs(sum(o["weights"].values()) - 1) < 1e-9
     me = client.get("/api/me", headers=h(1)).json()
     assert me["name"] == "수아" and me["weekly_cap"] == 2 and me["used_this_week"] <= 2
 
