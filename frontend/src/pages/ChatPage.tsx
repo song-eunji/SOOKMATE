@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { useEffect, useRef, useState } from "react";
 import { api, loadActivity, wsUrl } from "../api";
 import { ActivityBody, proposalText } from "./ActivityResults";
@@ -40,7 +41,7 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
   if (stored === undefined) return null;
   if (!stored) return (
     <div className="chat-pin empty">
-      <span>📌 {t("아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.")}</span>
+      <span><Icon name="pin" /> {t("아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.")}</span>
       <button className="link" onClick={goNote}>{t("노트 쓰러 가기 →")}</button>
     </div>
   );
@@ -48,14 +49,14 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
   return (
     <section className={`chat-pin${open ? " open" : ""}`} aria-label={t("다음 활동 추천")}>
       <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <span><small>📌 {t("다음 활동 추천")}</small><b>{act.title}</b></span>
-        <span className="chat-pin-toggle" aria-hidden="true">{open ? t("접기 ▲") : t("펼치기 ▼")}</span>
+        <span><small><Icon name="pin" /> {t("다음 활동 추천")}</small><b>{act.title}</b></span>
+        <span className="chat-pin-toggle" aria-hidden="true"><Icon name={open ? "up" : "down"} /></span>
       </button>
       {open && (
         <div className="chat-pin-body">
           <ActivityBody activity={act} />
           <button className="btn" disabled={sent} onClick={async () => { if (await onSend(proposalText(act))) setSent(true); }}>
-            {sent ? t("채팅에 제안을 보냈어요 ✓") : `💬 ${t("{name}님에게 이 활동 제안하기", { name: partnerName })}`}
+            <Icon name={sent ? "check" : "chat"} /> {sent ? t("채팅에 제안을 보냈어요") : t("{name}님에게 이 활동 제안하기", { name: partnerName })}
           </button>
           <button className="link" onClick={goNote}>{t("노트에서 다른 추천 받기 · 근거 자료 보기 →")}</button>
         </div>

@@ -208,7 +208,7 @@ const D: Record<string, Tr> = {
   "다음 활동 추천": ["Next activity suggestion", "次のアクティビティのおすすめ", "下次活动推荐", "Gợi ý hoạt động tiếp theo"],
   "접기 ▲": ["Collapse ▲", "閉じる ▲", "收起 ▲", "Thu gọn ▲"],
   "펼치기 ▼": ["Expand ▼", "開く ▼", "展开 ▼", "Mở rộng ▼"],
-  "채팅에 제안을 보냈어요 ✓": ["Suggestion sent in chat ✓", "チャットで提案しました ✓", "已在聊天中发送提议 ✓", "Đã gửi đề xuất trong chat ✓"],
+  "채팅에 제안을 보냈어요": ["Suggestion sent in chat", "チャットで提案しました", "已在聊天中发送提议", "Đã gửi đề xuất trong chat"],
   "{name}님에게 이 활동 제안하기": ["Suggest this activity to {name}", "{name}さんにこのアクティビティを提案する", "向{name}提议这个活动", "Đề xuất hoạt động này cho {name}"],
   "노트에서 다른 추천 받기 · 근거 자료 보기 →": ["Get another suggestion or see sources in Notes →", "ノートで別のおすすめ・根拠資料を見る →", "在笔记中获取其他推荐 · 查看依据资料 →", "Nhận gợi ý khác · xem tài liệu trong Ghi chép →"],
   "예: '아이스 아메리카노 한 잔 주세요'라는 주문 표현": ["e.g. How to order: \"One iced Americano, please\"", "例：「アイスアメリカーノを一つください」という注文表現", "例如：“请给我一杯冰美式”这样的点单说法", "Ví dụ: câu gọi món \"Cho tôi một ly Americano đá\""],

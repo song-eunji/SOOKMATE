@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { useState } from "react";
 import { saveActivityRatings } from "../api";
 import { ActivityBody } from "./ActivityResults";
@@ -6,8 +7,8 @@ import type { SavedActivity } from "../types";
 interface Props { matchId: number; stored: SavedActivity; onBack: () => void }
 
 const SIDES = [
-  {id: "retrieval", label: "📚 자료를 찾아보고 만든 추천", short: "자료 찾아봄"},
-  {id: "baseline", label: "📝 기록만 보고 만든 추천", short: "기록만 봄"},
+  {id: "retrieval", icon: "book", label: "자료를 찾아보고 만든 추천", short: "자료 찾아봄"},
+  {id: "baseline", icon: "note", label: "기록만 보고 만든 추천", short: "기록만 봄"},
 ] as const;
 const CRITERIA = ["relevance", "feasibility", "specificity", "novelty"] as const;
 const DEFAULT_RUBRIC = ["노트 내용과의 관련성", "실제로 해보기 쉬움", "구체성", "새로움(지난 활동과의 차별성)"];
@@ -60,7 +61,7 @@ export default function ActivityCompare({matchId, stored, onBack}: Props) {
     </section>}
 
     <div className="compare-grid">{SIDES.map((side) => <article className="act activity-card" key={side.id}>
-      <small className={`notes-eyebrow side-${side.id}`}>{side.label}</small>
+      <small className={`notes-eyebrow side-${side.id}`}><Icon name={side.icon} /> {side.label}</small>
       <ActivityBody activity={activities[side.id]} />
       <fieldset className="activity-ratings"><legend>내 평가 (1 낮음 · 5 높음)</legend>
         {rubric.map((criterion, i) => <div className="rate-row" key={criterion} role="radiogroup" aria-label={`${side.short} ${criterion}`}>
@@ -73,7 +74,7 @@ export default function ActivityCompare({matchId, stored, onBack}: Props) {
       </fieldset>
     </article>)}</div>
 
-    <button className="btn" disabled={!stored.comparable || !Object.keys(ratings).length} onClick={save}>{saved ? "평가를 저장했어요 ✓" : ratedAll ? "평가 저장하기" : "평가 저장하기 (일부만 해도 돼요)"}</button>
+    <button className="btn" disabled={!stored.comparable || !Object.keys(ratings).length} onClick={save}>{saved && <Icon name="check" />} {saved ? "평가를 저장했어요" : ratedAll ? "평가 저장하기" : "평가 저장하기 (일부만 해도 돼요)"}</button>
     {error && <p role="alert" className="banner err">{error}</p>}
     <p className="hint">사람 평가와 AI 심사는 따로 저장돼요. 표본이 적은 탐색용 비교이며, 어느 방식이 항상 낫다는 증명은 아니에요.</p>
   </div>;

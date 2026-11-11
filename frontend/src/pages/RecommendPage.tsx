@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { useState } from "react";
 import { api } from "../api";
 import { Avatar, TranslateButton } from "../components";
@@ -147,7 +148,7 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
                         <small>{t("내가 알려줄 것")}</small>
                         <b>{e.my_topic ? tv(e.my_topic) : t("정해지지 않았어요")}</b>
                       </div>
-                      <span className="x" aria-hidden="true">⇄</span>
+                      <span className="x" aria-hidden="true"><Icon name="swap" size={16} /></span>
                       <div className="b">
                         <small>{t("{name}님이 알려줄 것", { name: p.name })}</small>
                         <b>{e.partner_topic ? tv(e.partner_topic) : t("정해지지 않았어요")}</b>
