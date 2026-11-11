@@ -353,9 +353,9 @@ nav button { white-space: nowrap; }
 .notes-next small { color: var(--muted); font-size: 12px; }
 .notes-experiment-link { border: 0; border-top: 1px solid var(--line); background: transparent; padding: 18px 4px; text-align: left; font-size: 13px; color: var(--muted); }
 .notes-experiment-link span { display: block; margin-top: 5px; font-size: 12px; }
-.note-dialog { border: 0; padding: 0; background: var(--bg); color: var(--ink); border-radius: 24px; width: min(94vw, 480px); max-height: 90dvh; box-shadow: 0 24px 80px #172a4d40; }
+.note-dialog { border: 0; padding: 0; background: var(--bg); color: var(--ink); border-radius: 24px; width: min(calc(100vw - 32px), 400px); max-width: calc(100vw - 32px); max-height: 88dvh; margin: auto; overflow: auto; box-shadow: 0 24px 80px #172a4d40; }
 .note-dialog::backdrop { background: #17203980; backdrop-filter: blur(4px); }
-.note-dialog-wide { width: min(100vw, 560px); height: 94dvh; max-height: 94dvh; }
+.note-dialog-wide { width: min(calc(100vw - 32px), 560px); height: 88dvh; max-height: 88dvh; }
 .note-dialog-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; background: var(--bg); border-bottom: 1px solid var(--line); }
 .note-dialog-head h2 { font-size: 18px; margin: 0; }
 .note-close { border: 0; background: var(--soft); border-radius: 50%; width: 36px; height: 36px; }
@@ -376,7 +376,7 @@ nav button { white-space: nowrap; }
 .notes-spinner { width: 30px; height: 30px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; margin: auto; animation: note-spin 1s linear infinite; }
 @keyframes note-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .notes-spinner { animation: none; } }
-@media (max-width: 560px) { .note-dialog-wide { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; } .note-dialog { overscroll-behavior: contain; } }
+@media (max-width: 560px) { .note-dialog, .note-dialog-wide { width: calc(100vw - 32px); max-height: 88dvh; margin: auto; border-radius: 16px; overscroll-behavior: contain; } .note-dialog-body { padding: 16px; min-width: 0; overflow-wrap: anywhere; } }
 .notes-dev-tools { border-top: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 12px; }
 .notes-dev-tools summary { cursor: pointer; }
 .notes-dev-tools p { margin: 12px 0; }
