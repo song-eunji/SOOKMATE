@@ -514,13 +514,27 @@ def make_activity_card(me, partner, ex: dict) -> dict:
 
 
 # ------------------------------------------------------------------------- 번역
+def text_language(text: str) -> str | None:
+    """명확한 지원 언어 문자 패턴만 판별한다. 국적·프로필 언어는 사용하지 않는다."""
+    if re.search(r"[\u3040-\u30ff]", text):
+        return "ja"
+    ko, zh, latin = (len(re.findall(pattern, text)) for pattern in (r"[가-힣]", r"[\u4e00-\u9fff]", r"[A-Za-z]"))
+    if ko and ko >= latin / 2 and ko >= zh:
+        return "ko"
+    if zh and zh >= latin / 2:
+        return "zh"
+    if re.search(r"[ăâđêôơưĂÂĐÊÔƠƯ\u1ea0-\u1ef9]", text):
+        return "vi"
+    return "en" if latin >= 4 else None
+
+
 def translate(text: str, target: str) -> str | None:
     """사람이 쓴 글(채팅, 한 줄 소개, 공유 노트 등)을 target 언어로 번역. 실패하면 None.
 
     원문은 DB에 그대로 두고, 읽는 사람이 원할 때만 화면에서 번역해 보여준다.
     """
     text = text.strip()
-    if not text or target not in LANG_NAMES:
+    if not text or target not in LANG_NAMES or text_language(text) == target:
         return None
     data = llm_json(
         "너는 대학생 교류 앱의 번역기야. '문장'을 '번역할 언어'로 자연스럽게 번역해. "
@@ -532,7 +546,7 @@ def translate(text: str, target: str) -> str | None:
     )
     out = data.get("text") if data else None
     if isinstance(out, str) and 0 < len(out.strip()) <= max(300, len(text) * 4):
-        return out.strip()
+        return out.strip() if out.strip() != text else None
     return None
 
 

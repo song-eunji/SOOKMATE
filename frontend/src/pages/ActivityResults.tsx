@@ -1,3 +1,5 @@
+import useLocalizedActivity from "./useLocalizedActivity";
+import { useI18n } from "../i18n";
 import Icon from "../Icon";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../api";
@@ -40,26 +42,29 @@ export function StepText({text, sources}: {text: string; sources: ActivitySource
 }
 
 /** 채팅으로 보낼 제안 문구. 출처 표시([S1])는 상대에게 의미가 없어 뺀다. */
-export function proposalText(activity: GeneratedActivity) {
+export function proposalText(activity: GeneratedActivity, t: (text: string) => string = (text) => text) {
   const steps = activity.steps.map((s, i) => `${i + 1}. ${s.replace(/\s*\[S\d+(?:\s*,\s*S\d+)*\]/g, "")}`).join("\n");
-  return `[다음 교류 활동 제안]\n${activity.title}${activity.minutes ? ` (${activity.minutes}분)` : ""}\n\n${steps}\n\n괜찮다면 다음에 같이 해볼까요? 바꾸고 싶은 부분이 있으면 편하게 말해 주세요!`.slice(0, 500);
+  return `[${t("다음 교류 활동 제안")}]\n${activity.title}${activity.minutes ? ` (${activity.minutes} ${t("분")})` : ""}\n\n${steps}\n\n${t("괜찮다면 다음에 같이 해볼까요? 바꾸고 싶은 부분이 있으면 편하게 말해 주세요!")}`.slice(0, 500);
 }
 
 export function ActivityBody({activity}: {activity: GeneratedActivity}) {
+  const { t } = useI18n();
   return <>
     <h3>{activity.title}</h3>
     <div className="chips">
-      {activity.minutes && <span className="chip"><Icon name="clock" /> {activity.minutes}분</span>}
-      {activity.prep && <span className="chip">준비물 · {activity.prep}</span>}
+      {activity.minutes && <span className="chip"><Icon name="clock" /> {t("{n}분", { n: activity.minutes })}</span>}
+      {activity.prep && <span className="chip">{t("준비물")} · {activity.prep}</span>}
     </div>
     <p>{activity.desc}</p>
-    <h4>함께하는 순서</h4>
+    <h4>{t("함께하는 순서")}</h4>
     <ol className="activity-steps">{activity.steps.map((step, i) => <li key={i}><StepText text={step} sources={activity.sources} /></li>)}</ol>
   </>;
 }
 
 export default function ActivityResults({matchId, partnerName, stored, onRegenerate, onCompare, onGoChat}: Props) {
-  const result = stored.retrieval;
+  const { t } = useI18n();
+  const translated = useLocalizedActivity(matchId, stored);
+  const result = translated.localized?.retrieval ?? stored.retrieval;
   const [draft, setDraft] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -85,41 +90,43 @@ export default function ActivityResults({matchId, partnerName, stored, onRegener
     finally { if (alive.current) setSending(false); }
   };
 
-  if (composerOpen) return <section className="activity-context" aria-label="활동 제안 작성" lang="ko">
-    <button type="button" className="link" disabled={sending} onClick={() => {setComposerOpen(false); setError("");}}>← 활동으로 돌아가기</button>
-    <h3>{partnerName}님에게 보낼 제안</h3>
-    <label className="hint" htmlFor="activity-message">편하게 고쳐서 보내세요. 보내기를 눌러야 채팅으로 전송돼요.</label>
+  if (composerOpen) return <section className="activity-context" aria-label={t("활동 제안 작성")} lang={result.language ?? "ko"}>
+    <button type="button" className="link" disabled={sending} onClick={() => {setComposerOpen(false); setError("");}}>{t("활동으로 돌아가기")}</button>
+    <h3>{t("{name}님에게 보낼 제안", { name: partnerName })}</h3>
+    <label className="hint" htmlFor="activity-message">{t("편하게 고쳐서 보내세요. 보내기를 눌러야 채팅으로 전송돼요.")}</label>
     <textarea ref={messageInput} id="activity-message" maxLength={500} rows={9} value={draft} disabled={sending || sent} onChange={(e) => setDraft(e.target.value)} />
     <small>{draft.length} / 500</small>
-    <button type="button" className="btn" disabled={sending || sent || !draft.trim()} onClick={send}>{sent && <Icon name="check" />} {sent ? "채팅으로 제안을 보냈어요" : sending ? "보내는 중…" : "채팅으로 제안 보내기"}</button>
+    <button type="button" className="btn" disabled={sending || sent || !draft.trim()} onClick={send}>{sent && <Icon name="check" />} {sent ? t("채팅으로 제안을 보냈어요") : sending ? t("보내는 중…") : t("채팅으로 제안 보내기")}</button>
     {sent && <><p role="status" className="banner ok">채팅으로 보냈어요. {partnerName}님의 답은 대화방에서 확인할 수 있어요.</p>
-      <button type="button" className="btn ghost" onClick={onGoChat}><Icon name="chat" /> {partnerName}님과의 대화방으로 가기 →</button></>}
+      <button type="button" className="btn ghost" onClick={onGoChat}><Icon name="chat" /> {t("{name}님과의 대화방으로 가기", {name: partnerName})}</button></>}
     {error && <p role="alert" className="banner err">{error}</p>}
   </section>;
 
   return <div className="activity-results">
+    {translated.loading && <p role="status" className="hint">{t("내 언어로 추천을 번역하고 있어요")}</p>}
+    {translated.failed && <p role="status" className="hint">{t("번역하지 못해 원문을 표시해요")}</p>}
     <article className="act activity-card">
       <small className="notes-eyebrow">다음 만남 제안{stored.cached ? " · 저장된 추천" : ""}</small>
       {result.avoided?.length ? (result.novel
         ? <p className="hint">↻ 직전 추천 「{result.avoided[result.avoided.length - 1]}」과 장소·소재가 다른 활동으로 만들었어요.</p>
         : <p className="hint">공유한 기록이 한 가지 주제라 이전 추천과 비슷하게 나왔어요. 다른 경험이나 다음 희망을 기록에 더하면 더 다양한 활동을 받을 수 있어요.</p>) : null}
       <ActivityBody activity={result} />
-      <button type="button" className="btn" onClick={() => {
-        setDraft(proposalText(result));
+      <button type="button" className="btn" disabled={translated.loading} onClick={() => {
+        setDraft(proposalText(result, t));
         setSent(false); setError(""); setComposerOpen(true);
-      }}><Icon name="chat" /> {partnerName}님에게 채팅으로 제안하기</button>
-      <div className="row"><button type="button" className="btn ghost small" onClick={onRegenerate}>↻ 다른 활동 추천받기</button></div>
+      }}><Icon name="chat" /> {t("{name}님에게 채팅으로 제안하기", {name: partnerName})}</button>
+      <div className="row"><button type="button" className="btn ghost small" onClick={onRegenerate}>{t("다른 활동 추천받기")}</button></div>
     </article>
 
     <section className="activity-why">
-      <h4>왜 이 활동이에요?</h4>
+      <h4>{t("왜 이 활동이에요?")}</h4>
       <p>{result.reason}</p>
       {analysis?.entries.length ? <ul className="quote-list">{analysis.entries.map((entry) => <li key={entry.id}>
         <small>{entry.participant === "unknown" ? "공유 기록" : FIELD_LABEL[entry.field] ?? "공유 기록"}</small>“{entry.text}”</li>)}</ul> : null}
     </section>
 
     {retrieved.length > 0 && <section className="activity-sources" aria-label="참고한 자료">
-      <h4>참고한 자료</h4>
+      <h4>{t("참고한 자료")}</h4>
       <p className="hint">추천을 만들 때 아래 자료를 찾아 함께 읽었어요. 표시된 자료가 실제로 인용됐어요.</p>
       {retrieved.map((source) => <details key={source.id} id={`src-${source.id}`} className={cited.has(source.id) ? "cited" : ""} open={cited.has(source.id) && source.provider === "library"}>
         <summary><span className={`badge ${source.provider ?? "google"}`}>{PROVIDER[source.provider ?? "google"]?.label}</span>{source.title}{cited.has(source.id) && <em>인용</em>}</summary>

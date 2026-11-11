@@ -1,3 +1,5 @@
+import { useI18n } from "../i18n";
+import useLocalizedActivity from "./useLocalizedActivity";
 import Icon from "../Icon";
 import { useState } from "react";
 import { saveActivityRatings } from "../api";
@@ -14,14 +16,17 @@ const CRITERIA = ["relevance", "feasibility", "specificity", "novelty"] as const
 const DEFAULT_RUBRIC = ["노트 내용과의 관련성", "실제로 해보기 쉬움", "구체성", "새로움(지난 활동과의 차별성)"];
 
 export default function ActivityCompare({matchId, stored, onBack}: Props) {
-  const baseline = stored.baseline!;
+  const { t } = useI18n();
+  const translated = useLocalizedActivity(matchId, stored);
+  const display = translated.localized ?? stored;
+  const baseline = display.baseline!;
   const rubric = stored.rubric?.length === 4 ? stored.rubric : DEFAULT_RUBRIC;
   const judge = stored.evaluation?.judge ?? null;
   const auto = stored.evaluation?.auto;
   const [ratings, setRatings] = useState<Record<string, number>>(() => ({...stored.ratings}));
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
-  const activities = {retrieval: stored.retrieval, baseline};
+  const activities = {retrieval: display.retrieval, baseline};
   const humanTotal = (side: string) => CRITERIA.reduce((sum, _, i) => sum + (ratings[`${side}-${i}`] ?? 0), 0);
   const ratedAll = SIDES.every((s) => CRITERIA.every((_, i) => ratings[`${s.id}-${i}`]));
 
@@ -32,6 +37,8 @@ export default function ActivityCompare({matchId, stored, onBack}: Props) {
   };
 
   return <div className="activity-results compare">
+    {translated.loading && <p role="status">{t("내 언어로 추천을 번역하고 있어요")}</p>}
+    {translated.failed && <p role="status">{t("번역하지 못해 원문을 표시해요")}</p>}
     <button type="button" className="link" onClick={onBack}>← 추천으로 돌아가기</button>
     <p className="notes-muted">같은 기록으로 추천을 두 번 만들었어요. 한 번은 <strong>활동 자료집·위키백과를 찾아보고</strong>, 한 번은 <strong>기록만 보고</strong> 만들었어요. 다른 조건은 모두 같아요. 자료를 찾아보는 게 정말 도움이 되는지 확인해 보세요.</p>
     {!stored.comparable && <p className="banner wait">이번 추천은 자료를 인용하지 않아서 두 방식의 차이를 비교하기 어려워요. 참고용으로만 보세요.</p>}

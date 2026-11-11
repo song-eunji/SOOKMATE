@@ -1,8 +1,9 @@
+import useLocalizedActivity from "./useLocalizedActivity";
 import Icon from "../Icon";
 import { useEffect, useRef, useState } from "react";
 import { api, loadActivity, wsUrl } from "../api";
 import { ActivityBody, proposalText } from "./ActivityResults";
-import { TranslateButton } from "../components";
+import { LocalizedMessage } from "../components";
 import { useI18n } from "../i18n";
 import type { ChatMessage, MatchView, Me, SavedActivity } from "../types";
 
@@ -38,6 +39,7 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
     window.addEventListener("focus", load);
     return () => { alive = false; window.removeEventListener("focus", load); };
   }, [matchId]);
+  const translation = useLocalizedActivity(matchId, stored);
   if (stored === undefined) return null;
   if (!stored) return (
     <div className="chat-pin empty">
@@ -45,7 +47,7 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
       <button className="link" onClick={goNote}>{t("노트 쓰러 가기 →")}</button>
     </div>
   );
-  const act = stored.retrieval;
+  const act = translation.localized?.retrieval ?? stored.retrieval;
   return (
     <section className={`chat-pin${open ? " open" : ""}`} aria-label={t("다음 활동 추천")}>
       <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
@@ -54,8 +56,10 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
       </button>
       {open && (
         <div className="chat-pin-body">
+          {translation.loading && <p role="status">{t("내 언어로 추천을 번역하고 있어요")}</p>}
+          {translation.failed && <p role="status">{t("번역하지 못해 원문을 표시해요")}</p>}
           <ActivityBody activity={act} />
-          <button className="btn" disabled={sent} onClick={async () => { if (await onSend(proposalText(act))) setSent(true); }}>
+          <button className="btn" disabled={sent || translation.loading} onClick={async () => { if (await onSend(proposalText(act, t))) setSent(true); }}>
             <Icon name={sent ? "check" : "chat"} /> {sent ? t("채팅에 제안을 보냈어요") : t("{name}님에게 이 활동 제안하기", { name: partnerName })}
           </button>
           <button className="link" onClick={goNote}>{t("노트에서 다른 추천 받기 · 근거 자료 보기 →")}</button>
@@ -171,8 +175,7 @@ export default function ChatPage({ me, active, onChanged, flash, goNote, picked 
                 </span>
               )}
               <div className={`msg ${mine ? "me" : "them"}`}>
-                {m.text}
-                {!mine && <TranslateButton text={m.text} />}
+                {mine ? m.text : <LocalizedMessage key={`${m.id}-${me.ui_lang}`} text={m.text} />}
               </div>
               {!mine && (
                 <span className="meta">

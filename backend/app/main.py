@@ -240,6 +240,14 @@ class BlockIn(BaseModel):
 
 class TranslateIn(BaseModel):
     text: str = Field(min_length=1, max_length=500)
+    target: str | None = None
+
+    @field_validator("target")
+    @classmethod
+    def valid_target(cls, value):
+        if value is not None and value not in ai.LANG_NAMES:
+            raise ValueError("지원하지 않는 언어예요.")
+        return value
 
 
 class ReportIn(BaseModel):
@@ -709,8 +717,9 @@ def get_activity_card(match_id: int, me: User = Depends(me_dep), db: Session = D
 @app.post("/api/translate")
 def translate_text(body: TranslateIn, me: User = Depends(me_dep)):
     """사람이 쓴 글을 읽는 사람의 화면 언어로 번역한다. 실패하면 원문을 그대로 돌려준다."""
-    out = ai.translate(body.text, me.ui_lang)
-    return {"text": out or body.text, "translated": out is not None, "lang": me.ui_lang}
+    target = body.target or me.ui_lang
+    out = ai.translate(body.text, target)
+    return {"text": out or body.text, "translated": out is not None, "lang": target}
 
 
 # ------------------------------------------------------------------- 교류 노트
@@ -824,6 +833,30 @@ def generate_next_activity(match_id: int, compare: bool = False, regenerate: boo
         current(db, match_id, latest)
         raise HTTPException(409, "생성 중 공유 노트가 변경됐습니다. 최신 노트로 다시 추천받아 주세요.")
     return response
+
+
+class ActivityTranslationIn(BaseModel):
+    run_id: int
+    target: str
+
+    @field_validator("target")
+    @classmethod
+    def valid_target(cls, value):
+        if value not in ai.LANG_NAMES:
+            raise ValueError("지원하지 않는 언어예요.")
+        return value
+
+
+@app.post("/api/matches/{match_id}/activity-result/translation")
+def translate_activity_result(match_id: int, body: ActivityTranslationIn, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+    from .activity_store import current, view
+    from .activity_translation import localized_view
+    ex, _ = _shared_activity_context(db, match_id, me)
+    row = current(db, match_id, ex)
+    if row is None or row.id != body.run_id:
+        raise HTTPException(409, "추천이 변경됐어요. 최신 추천을 다시 열어 주세요.")
+    # 표시용 사본만 번역하며 저장된 원문·평가·공유 기록을 수정하지 않는다.
+    return localized_view(view(row, me.id), body.target)
 
 
 class ActivityRatingIn(BaseModel):

@@ -140,7 +140,7 @@ export const api = {
   saveNote: (id: number, n: NoteData) => req<NoteData>(`/matches/${id}/notes`, { method: "PUT", body: JSON.stringify(n) }),
   deleteNote: (id: number) => req<{ ok: boolean }>(`/matches/${id}/notes`, { method: "DELETE" }),
   nextActivity: (id: number) => req<NextActivity>(`/matches/${id}/next-activity`),
-  translate: (text: string) => post<TranslateResult>("/translate", { text }),
+  translate: (text: string, target?: string) => post<TranslateResult>("/translate", { text, target }),
   block: (userId: number) => post<{ ok: boolean }>("/blocks", { user_id: userId }),
   report: (userId: number, matchId: number, reason: string) =>
     post<{ ok: boolean }>("/reports", { user_id: userId, match_id: matchId, reason }),
@@ -173,3 +173,5 @@ export interface AppointmentState {
 export const getAppointment = (id: number) => req<AppointmentState>(`/matches/${id}/appointment`);
 export const proposeAppointment = (id: number, date: string, slot: string, version: number) => post<AppointmentState>(`/matches/${id}/appointment`, {date, slot, version});
 export const respondAppointment = (id: number, action: "accept" | "decline" | "cancel", version: number) => post<AppointmentState>(`/matches/${id}/appointment/respond`, {action, version});
+
+export const translateActivity = (id: number, runId: number, target: string) => post<import("./types").SavedActivity>(`/matches/${id}/activity-result/translation`, {run_id: runId, target});
