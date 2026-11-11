@@ -18,9 +18,59 @@ function hoursLeft(iso: string): number {
   return Math.max(0, Math.ceil((new Date(iso + "Z").getTime() - Date.now()) / 3_600_000));
 }
 
+const SHOWN_TIMES = 3;
+
+/** "월 18:00–19:00" 같은 한 시간 단위 시간을 이어지는 구간으로 합친다.
+ *  같은 구간을 가진 요일은 한 칩으로 묶는다 (예: 월~금 18:00–22:00). 읽을 수 없는 값은 그대로 둔다. */
+function mergeTimes(times: string[], days: string[], tDay: (d: string) => string): string[] {
+  const byDay = new Map<string, number[]>();
+  const rest: string[] = [];
+  for (const v of times) {
+    const m = v.match(/^(\S+) (\d{2}):00–(\d{2}):00$/);
+    if (!m || !days.includes(m[1])) {
+      rest.push(v);
+      continue;
+    }
+    byDay.set(m[1], [...(byDay.get(m[1]) ?? []), Number(m[2])]);
+  }
+
+  // 요일별로 연속한 시각을 구간으로 합친다
+  const rangeOf = new Map<string, string>();
+  for (const [day, hours] of byDay) {
+    const sorted = [...new Set(hours)].sort((a, b) => a - b);
+    const parts: string[] = [];
+    let start = sorted[0];
+    let prev = start;
+    for (const h of [...sorted.slice(1), Infinity]) {
+      if (h !== prev + 1) {
+        parts.push(`${String(start).padStart(2, "0")}:00–${String(prev + 1).padStart(2, "0")}:00`);
+        start = h;
+      }
+      prev = h;
+    }
+    rangeOf.set(day, parts.join(", "));
+  }
+
+  // 구간이 같은 요일끼리 묶는다. 이어지는 요일이면 "월~금", 아니면 "월·수·금"
+  const dayGroups = new Map<string, string[]>();
+  for (const d of days) {
+    const r = rangeOf.get(d);
+    if (r) dayGroups.set(r, [...(dayGroups.get(r) ?? []), d]);
+  }
+  const out: string[] = [];
+  for (const [range, group] of dayGroups) {
+    const idx = group.map((d) => days.indexOf(d));
+    const run = group.length >= 3 && idx.every((x, i) => i === 0 || x === idx[i - 1] + 1);
+    const label = run ? `${tDay(group[0])}~${tDay(group[group.length - 1])}` : group.map(tDay).join("·");
+    out.push(`${label} ${range}`);
+  }
+  return [...out, ...rest];
+}
+
 export default function RecommendPage({ opts, matches, onChanged, onOpenChat, flash }: Props) {
   const { t, tv } = useI18n();
   const [busy, setBusy] = useState<number | null>(null);
+  const [openTimes, setOpenTimes] = useState<Set<number>>(new Set());
   // 수락 여부를 고르는 추천이 있으면, 맨 아래에 안내를 한 번만 보여준다 (기한은 가장 빠른 것 기준)
   const undecided = matches.filter((m) => m.status !== "confirmed" && !m.my_accepted);
 
@@ -131,11 +181,37 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
                   </div>
                   <div className="chips">
                     <span className="lab">{t("겹치는 시간")}</span>
-                    {e.common_times.map((v) => (
-                      <span className="tag" key={v}>
-                        {tv(v)}
-                      </span>
-                    ))}
+                    {(() => {
+                      const merged = mergeTimes(e.common_times, opts.days, t);
+                      const open = openTimes.has(m.id);
+                      const shown = open ? merged : merged.slice(0, SHOWN_TIMES);
+                      return (
+                        <>
+                          {shown.map((v) => (
+                            <span className="tag" key={v}>
+                              {v}
+                            </span>
+                          ))}
+                          {merged.length > SHOWN_TIMES && (
+                            <button
+                              type="button"
+                              className="tag more"
+                              aria-expanded={open}
+                              onClick={() =>
+                                setOpenTimes((s) => {
+                                  const n = new Set(s);
+                                  if (n.has(m.id)) n.delete(m.id);
+                                  else n.add(m.id);
+                                  return n;
+                                })
+                              }
+                            >
+                              {open ? t("접기") : t("{n}개 더 보기", { n: merged.length - SHOWN_TIMES })}
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
                     {e.common_times.length === 0 && <span className="hint">{t("겹치는 시간이 없어요")}</span>}
                   </div>
                 </div>
