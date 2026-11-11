@@ -63,6 +63,7 @@ export default function RoomView({ active, sub, onSub, onBack, onChanged, flash,
         <div className="grow">
           <b>{partner.name}</b>
           <span className="m">{partner.bio || t("연락처 공개 없이 대화해요")}</span>
+          {partner.bio && <TranslateButton text={partner.bio} />}
         </div>
         <button className="link" onClick={() => setMenu((v) => !v)} aria-expanded={menu}>
           {t("신고·차단")}
@@ -82,7 +83,6 @@ export default function RoomView({ active, sub, onSub, onBack, onChanged, flash,
           <button className="btn small" onClick={block}>
             {t("차단하기")}
           </button>
-          {partner.bio && <TranslateButton text={partner.bio} />}
         </div>
       )}
 

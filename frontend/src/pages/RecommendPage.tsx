@@ -112,6 +112,7 @@ export default function RecommendPage({ opts, matches, onChanged, onOpenChat, fl
                 <div className="reason">
                   <small>{t("추천 이유")}</small>
                   {e.reason}
+                  <TranslateButton text={e.reason} />
                 </div>
                 <div className="overlap">
                   <div className="chips">

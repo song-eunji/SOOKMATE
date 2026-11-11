@@ -24,6 +24,7 @@ type WsEvent =
 
 /** 대화방 위에 고정되는 '다음 활동 추천' 카드. 노트 탭에 가지 않아도 추천을 보고 바로 제안할 수 있다. */
 function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number; partnerName: string; onSend: (text: string) => Promise<boolean>; goNote: () => void }) {
+  const { t } = useI18n();
   const [stored, setStored] = useState<SavedActivity | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState(false);
@@ -39,24 +40,24 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
   if (stored === undefined) return null;
   if (!stored) return (
     <div className="chat-pin empty">
-      <span>📌 아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.</span>
-      <button className="link" onClick={goNote}>노트 쓰러 가기 →</button>
+      <span>📌 {t("아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.")}</span>
+      <button className="link" onClick={goNote}>{t("노트 쓰러 가기 →")}</button>
     </div>
   );
   const act = stored.retrieval;
   return (
-    <section className={`chat-pin${open ? " open" : ""}`} aria-label="다음 활동 추천">
+    <section className={`chat-pin${open ? " open" : ""}`} aria-label={t("다음 활동 추천")}>
       <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <span><small>📌 다음 활동 추천</small><b>{act.title}</b></span>
-        <span className="chat-pin-toggle" aria-hidden="true">{open ? "접기 ▲" : "펼치기 ▼"}</span>
+        <span><small>📌 {t("다음 활동 추천")}</small><b>{act.title}</b></span>
+        <span className="chat-pin-toggle" aria-hidden="true">{open ? t("접기 ▲") : t("펼치기 ▼")}</span>
       </button>
       {open && (
         <div className="chat-pin-body">
           <ActivityBody activity={act} />
           <button className="btn" disabled={sent} onClick={async () => { if (await onSend(proposalText(act))) setSent(true); }}>
-            {sent ? "채팅에 제안을 보냈어요 ✓" : `💬 ${partnerName}님에게 이 활동 제안하기`}
+            {sent ? t("채팅에 제안을 보냈어요 ✓") : `💬 ${t("{name}님에게 이 활동 제안하기", { name: partnerName })}`}
           </button>
-          <button className="link" onClick={goNote}>노트에서 다른 추천 받기 · 근거 자료 보기 →</button>
+          <button className="link" onClick={goNote}>{t("노트에서 다른 추천 받기 · 근거 자료 보기 →")}</button>
         </div>
       )}
     </section>
