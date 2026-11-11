@@ -134,8 +134,8 @@ nav button.on::before { content: ""; position: absolute; top: 0; left: 30%; righ
 .chat-pin-head small { color: var(--accent-ink); }
 .roombody.chat .log { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; gap: 8px; }
 .msg { border-radius: 4px 16px 16px 16px; padding: 8px 13px; font-size: 14.5px; }
-.msg.them { background: var(--warm-soft); color: var(--ink); box-shadow: none; align-self: flex-start; }
-.msg.me { background: var(--accent); color: #fff; border-radius: 16px 4px 16px 16px; }
+.msg.them { background: #fff0b8; color: #514324; box-shadow: none; align-self: flex-start; }
+.msg.me { background: #d9eaff; color: #243e60; border-radius: 16px 4px 16px 16px; }
 .msg.sys { background: none; color: var(--muted); font-size: 12.5px; }
 .chatfoot { border-radius: 0; background: var(--paper); box-shadow: 0 -1.5px 0 var(--line); padding: 10px 14px 16px; }
 .quick-replies .chip { min-height: 40px; border-radius: 10px; background: var(--surface); font-size: 13.5px; padding: 0 13px; }
@@ -286,8 +286,7 @@ nav button.on::before { content: ""; position: absolute; top: 0; left: 30%; righ
 .xcard.take .pill { background: var(--warm-soft); color: var(--warm-ink); box-shadow: none; }
 .xcard .addrow input { background: var(--paper); }
 
-/* 말풍선과 아바타는 중립색으로 유지 */
-.msg.them { background: var(--surface); }
+/* 아바타는 캐릭터 원본을 사용하고 말풍선은 대화 방향으로 구분 */
 .av { background: var(--soft); color: var(--ink); }
 .chat-pin-head small { color: var(--muted); }
 .quick-replies .chip { background: var(--surface); }
@@ -296,8 +295,7 @@ nav button.on::before { content: ""; position: absolute; top: 0; left: 30%; righ
 .banner.ok { background: transparent; color: var(--muted); font-weight: 400; box-shadow: none; padding: 4px 2px; font-size: 13px; }
 .banner.ok::before { content: "✓"; flex: none; color: var(--ok); font-size: 15px; font-weight: 700; }
 
-/* 상대 말풍선은 중립색으로 유지 */
-.msg.them { background: var(--surface); }
+/* 말풍선 색은 대화방 규칙에서 한 번만 지정한다. */
 
 /* 내 정보의 "내 티켓" */
 .cap-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
