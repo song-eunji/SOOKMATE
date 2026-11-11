@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import { Avatar, Chip, TagInput } from "../components";
 import { useI18n } from "../i18n";
@@ -16,7 +16,12 @@ interface Props {
 function fromMe(me: Me) {
   return {
     interests: me.interests,
-    times: me.times,
+    times: [...new Set(me.times.flatMap((value) => {
+      const [day, slot] = value.split(" ");
+      const ranges: Record<string, [number, number]> = { 오전: [9, 12], 오후: [12, 18], 저녁: [18, 22] };
+      const range = ranges[slot];
+      return range ? Array.from({ length: range[1] - range[0] }, (_, i) => `${day} ${String(range[0] + i).padStart(2, "0")}:00–${String(range[0] + i + 1).padStart(2, "0")}:00`) : [value];
+    }))],
     langs: me.langs,
     teach: me.teach,
     learn: me.learn,
@@ -26,10 +31,11 @@ function fromMe(me: Me) {
 }
 
 export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Props) {
-  const { t } = useI18n();
+  const { t, tv } = useI18n();
   const [f, setF] = useState(fromMe(me));
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editingSwap, setEditingSwap] = useState(false);
 
   // 사용자를 바꿨을 때만 폼을 다시 채운다 (4초마다 오는 새로고침에는 반응하지 않음)
   useEffect(() => setF(fromMe(me)), [me.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -56,31 +62,67 @@ export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Prop
     <>
       <h1>{t("내 프로필")}</h1>
 
-      <section className="sec block">
-        {editing ? (
-          <BasicForm
-            me={me}
-            opts={opts}
-            flash={flash}
-            onCancel={() => setEditing(false)}
-            onSaved={async () => {
-              await onSaved();
-              setEditing(false);
-            }}
-          />
-        ) : (
-          <div className="who">
-            <Avatar name={me.name} size="lg" />
-            <div className="grow">
-              <b>{me.name}</b>
-              <span className="m">{me.bio || t("한 줄 소개를 적어 보세요")}</span>
+      {/* 내 티켓: 위는 나, 아래는 내가 알려줄 것 ⇄ 배우고 싶은 것 (추천 티켓과 같은 모양) */}
+      <article className="ticket">
+        <div className="tt">
+          {editing ? (
+            <BasicForm
+              me={me}
+              opts={opts}
+              flash={flash}
+              onCancel={() => setEditing(false)}
+              onSaved={async () => {
+                await onSaved();
+                setEditing(false);
+              }}
+            />
+          ) : (
+            <div className="who">
+              <Avatar name={me.name} size="lg" />
+              <div className="grow">
+                <b>{me.name}</b>
+                <span className="m">{me.bio || t("한 줄 소개를 적어 보세요")}</span>
+              </div>
+              <button className="btn ghost small" onClick={() => setEditing(true)}>
+                {t("수정")}
+              </button>
             </div>
-            <button className="btn ghost small" onClick={() => setEditing(true)}>
-              {t("수정")}
+          )}
+        </div>
+        <div className="cut" aria-hidden="true" />
+        <div className="tm">
+          <div className="cap-row">
+            <p className="cap">{t("서로 하나씩 알려줘요")}</p>
+            <button className="link" onClick={() => setEditingSwap((v) => !v)}>
+              {editingSwap ? t("완료") : t("수정")}
             </button>
           </div>
-        )}
-      </section>
+          {editingSwap ? (
+            <div className="exchange">
+              <div className="xcard give">
+                <b>{t("알려줄 수 있어요")}</b>
+                <TagInput values={f.teach} onChange={(v) => set("teach", v)} suggestions={opts.topics} placeholder={t("예: 학교 앞 맛집")} />
+              </div>
+              <div className="xcard take">
+                <b>{t("배우고 싶어요")}</b>
+                <TagInput tone="warm" values={f.learn} onChange={(v) => set("learn", v)} suggestions={opts.topics} placeholder={t("예: 일본어 인사말")} />
+              </div>
+            </div>
+          ) : (
+            <div className="swap">
+              <div className="a">
+                <small>{t("알려줄 수 있어요")}</small>
+                {f.teach.length ? f.teach.map((v) => <b key={v}>{tv(v)}</b>) : <span className="none">{t("아직 없어요")}</span>}
+              </div>
+              <span className="x" aria-hidden="true">⇄</span>
+              <div className="b">
+                <small>{t("배우고 싶어요")}</small>
+                {f.learn.length ? f.learn.map((v) => <b key={v}>{tv(v)}</b>) : <span className="none">{t("아직 없어요")}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      </article>
 
       <section className="sec block">
         <h2>
@@ -99,6 +141,8 @@ export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Prop
         <h2>
           {t("이번 주 가능한 시간")}
         </h2>
+        <p className="hint">{t("1시간 단위로 가능한 시간을 선택해 주세요. 정확한 약속은 대화에서 정해요.")}</p>
+        {me.times.some((value) => / (오전|오후|저녁)$/.test(value)) && <p className="hint">{t("기존 오전·오후·저녁을 시간별로 펼쳤어요. 실제 가능한 시간만 남기고 저장해 주세요.")}</p>}
         <TimePicker days={opts.days} slots={opts.slots} value={f.times} onChange={(v) => set("times", v)} />
       </section>
 
@@ -112,33 +156,6 @@ export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Prop
           suggestions={opts.interests}
           placeholder={t("예: 뜨개질")}
         />
-      </section>
-
-      <section className="sec">
-        <h2 className="plain">
-          {t("서로 하나씩 알려줘요")}
-        </h2>
-        <div className="exchange">
-          <div className="xcard give">
-            <b>{t("알려줄 수 있어요")}</b>
-            <TagInput
-              values={f.teach}
-              onChange={(v) => set("teach", v)}
-              suggestions={opts.topics}
-              placeholder={t("예: 학교 앞 맛집")}
-            />
-          </div>
-          <div className="xcard take">
-            <b>{t("배우고 싶어요")}</b>
-            <TagInput
-              tone="warm"
-              values={f.learn}
-              onChange={(v) => set("learn", v)}
-              suggestions={opts.topics}
-              placeholder={t("예: 일본어 인사말")}
-            />
-          </div>
-        </div>
       </section>
 
       <section className="sec block">
@@ -185,16 +202,14 @@ function TimePicker({ days, slots, value, onChange }: { days: string[]; slots: s
   const { t } = useI18n();
   const all = days.flatMap((d) => slots.map((s) => `${d} ${s}`));
   const toggle = (k: string) => onChange(value.includes(k) ? value.filter((x) => x !== k) : [...value, k]);
-  const only = (slot: string) => onChange(all.filter((k) => k.endsWith(` ${slot}`)));
+  const toggleDay = (day: string) => {
+    const keys = slots.map((slot) => `${day} ${slot}`);
+    onChange(keys.every((key) => value.includes(key)) ? value.filter((key) => !keys.includes(key)) : [...new Set([...value, ...keys])]);
+  };
 
   return (
     <div className="times">
       <div className="quick">
-        {slots.map((s) => (
-          <button key={s} type="button" className="sg" onClick={() => only(s)}>
-            {t(`${s}만`)}
-          </button>
-        ))}
         <button type="button" className="sg" onClick={() => onChange(all)}>
           {t("모두")}
         </button>
@@ -202,20 +217,22 @@ function TimePicker({ days, slots, value, onChange }: { days: string[]; slots: s
           {t("비우기")}
         </button>
       </div>
-      {days.map((d) => (
-        <div className="trow" key={d}>
-          <span className="d">{t(d)}</span>
-          {slots.map((s) => {
-            const k = `${d} ${s}`;
-            const on = value.includes(k);
-            return (
-              <button key={k} type="button" className={`tcell ${on ? "on" : ""}`} aria-pressed={on} aria-label={`${t(d)} ${t(s)}`} onClick={() => toggle(k)}>
-                {t(s)}
-              </button>
-            );
-          })}
-        </div>
-      ))}
+      <div className="tgrid" style={{ gridTemplateColumns: `88px repeat(${days.length}, minmax(0, 1fr))` }}>
+        <span />
+        {days.map((d) => (
+          <button type="button" className="dh day-toggle" key={d} aria-label={`${t(d)} 전체 선택 또는 해제`} aria-pressed={slots.every((slot) => value.includes(`${d} ${slot}`))} onClick={() => toggleDay(d)}>{t(d)}</button>
+        ))}
+        {slots.map((s) => (
+          <Fragment key={s}>
+            <span className="rh">{s}</span>
+            {days.map((d) => {
+              const k = `${d} ${s}`;
+              const on = value.includes(k);
+              return <button key={k} type="button" className={`tcell ${on ? "on" : ""}`} aria-pressed={on} aria-label={`${t(d)} ${t(s)}`} onClick={() => toggle(k)} />;
+            })}
+          </Fragment>
+        ))}
+      </div>
     </div>
   );
 }

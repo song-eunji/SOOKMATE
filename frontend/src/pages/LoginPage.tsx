@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { LogoMark } from "../components";
 import { isLang, useI18n } from "../i18n";
-import type { Options } from "../types";
+import type { DevUser, Options } from "../types";
 
 interface Props {
   opts: Options;
@@ -37,12 +37,27 @@ export default function LoginPage({ opts, onLoggedIn, onDev }: Props) {
   const [devCode, setDevCode] = useState(""); // 개발 모드에서만 서버가 알려 준다
   const codeInput = useRef<HTMLInputElement>(null);
 
+  // 개발자 입장(스위치가 켜졌을 때만): 이메일 없이 가짜 프로필 계정으로 들어간다
+  const [devUsers, setDevUsers] = useState<DevUser[]>([]);
+  const [devPick, setDevPick] = useState(0);
+  const [devOpen, setDevOpen] = useState(false);
 
   const domain = opts.login_domain;
   const local = mail.trim();
   const email = local.includes("@") ? local : `${local}@${domain}`;
   const signup = view === "signup";
   const reset = view === "reset";
+
+  useEffect(() => {
+    if (!opts.dev_login) return;
+    api
+      .devUsers()
+      .then((rows) => {
+        setDevUsers(rows);
+        setDevPick((rows.find((u) => u.name === "수아") ?? rows[0])?.id ?? 0);
+      })
+      .catch(() => undefined);
+  }, [opts.dev_login]);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -114,6 +129,7 @@ export default function LoginPage({ opts, onLoggedIn, onDev }: Props) {
           : "";
   const canFinish = !pwProblem && again === password && !busy;
 
+  const devEnter = (id: number) => run(async () => onLoggedIn((await api.devLogin(id)).token));
 
   const errorBox = error && (
     <div className="login-error-box">
@@ -198,7 +214,7 @@ export default function LoginPage({ opts, onLoggedIn, onDev }: Props) {
       <div className="login-body">
         <div className="login-brand">
           <LogoMark size={76} />
-          <span className="login-word">SOOKMATE</span>
+          <span className="login-word">sookmate</span>
           <p className="login-tag">{tagline}</p>
         </div>
 
@@ -340,6 +356,37 @@ export default function LoginPage({ opts, onLoggedIn, onDev }: Props) {
           )
         )}
       </div>
+
+      {opts.dev_login && devUsers.length > 0 && (
+        <div className="devpanel">
+          <p className="devtitle">{t("개발자 입장")}</p>
+          <button type="button" className="link" onClick={() => setDevOpen((v) => !v)}>
+            {devOpen ? t("접기") : t("프로필 골라서 들어가기")}
+          </button>
+          {devOpen && (
+            <div className="devpick">
+              <select aria-label={t("가짜 프로필 고르기")} value={devPick} onChange={(e) => setDevPick(Number(e.target.value))}>
+                {(["domestic", "international"] as const).map((kind) => (
+                  <optgroup key={kind} label={kind === "domestic" ? t("국내 학생") : t("유학생")}>
+                    {devUsers
+                      .filter((u) => u.kind === kind)
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                          {u.nationality ? ` · ${u.nationality}` : ""} · {u.dept}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
+              <button type="button" className="btn" disabled={busy || !devPick} onClick={() => devEnter(devPick)}>
+                {t("이 프로필로 입장")}
+              </button>
+            </div>
+          )}
+          <p className="devnote">{t("시연 전 개발용이에요. 가짜 프로필 계정으로만 들어갈 수 있어요.")}</p>
+        </div>
+      )}
 
       {opts.dev_mode && (
         <button className="link devlink" onClick={onDev}>

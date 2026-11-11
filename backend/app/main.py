@@ -5,20 +5,22 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from . import ai, auth, matching, views
-from .constants import BIO_MAX_LEN, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
+from .constants import BIO_MAX_LEN, LEGACY_HOURS, expand_times, DAYS, INTERESTS, LANGUAGES, NAME_MAX_LEN, SLOTS, TIME_SLOTS, TOPICS, UI_LANGS, WEIGHTS
 from .db import Base, SessionLocal, engine, ensure_columns, get_db
 from .models import ChatRead, Match, Message, Note, Report, User
+from .personas import PERSONAS
 from .seed import seed_demo
 from .notifications.router import create_router as create_notifications_router
 from .notifications.service import message_event, read_messages
@@ -26,6 +28,12 @@ from .scheduling.coordination import matching_lock, serialized
 from .scheduling.scheduler import scheduler_lifespan
 
 DEV_MODE = os.getenv("DEV_MODE", "1") == "1"
+# 시연용: 가짜(시드) 상대가 수락해 주고 대화에 답장한다. 실제 서비스에는 가짜 사용자가 없으므로 기본은 꺼짐.
+DEMO_PARTNERS = os.getenv("DEMO_PARTNERS", "0") == "1"
+# 개발자 입장: 이메일 없이 가짜 프로필 계정으로 들어가는 버튼. DEV_MODE 와 따로 켜고 끄며, 가짜 계정으로만 들어갈 수 있다.
+DEV_LOGIN = os.getenv("DEV_LOGIN", "0") == "1"
+matching.FAKE_PAIRS = DEV_MODE  # 개발 모드가 아니면 가짜끼리는 이어 주지 않는다
+DEMO_REPLY_DELAY = float(os.getenv("DEMO_REPLY_DELAY", "1.0"))  # 답장을 보내기까지 기다리는 초
 log = logging.getLogger("sookmate")
 
 
@@ -37,13 +45,26 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         if not db.scalars(select(User).limit(1)).first():
             seed_demo(db)
-            matching.assign(db)
+            # 시드끼리 미리 추천을 맺어 두는 건 개발용 시연(수아 계정)에서만. 그러면 실제로 로그인한 사용자가
+            # 들어왔을 때 가짜 유학생·국내 학생의 이번 주 자리가 이미 다 차서 추천이 하나도 없게 된다.
+            if DEV_MODE:
+                matching.assign(db)
     with scheduler_lifespan() as scheduler:
         app.state.scheduler = scheduler
         try:
             yield
         finally:
             app.state.scheduler = None
+
+
+def reset_seed_data(db: Session, preassign: bool) -> int:
+    """DB를 비우고 가짜 프로필을 다시 넣는다. preassign 이면 가짜끼리 첫 배정까지 돌린다."""
+    db.close()
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with SessionLocal() as s:
+        seed_demo(s)
+        return matching.assign(s) if preassign else 0
 
 
 app = FastAPI(title="SOOKMATE API", lifespan=lifespan)
@@ -140,7 +161,7 @@ class ProfileIn(BaseModel):
     @field_validator("times")
     @classmethod
     def _t(cls, v):
-        return _only(v, TIME_SLOTS, "시간")
+        return expand_times(_only(v, TIME_SLOTS + [f"{d} {s}" for d in DAYS for s in LEGACY_HOURS], "시간"))
 
     @field_validator("langs")
     @classmethod
@@ -241,6 +262,7 @@ def options():
         "bio_max_len": BIO_MAX_LEN,
         "weights": WEIGHTS,
         "dev_mode": DEV_MODE,
+        "dev_login": DEV_LOGIN,
     }
 
 
@@ -380,6 +402,33 @@ def reset_password(body: ResetIn, db: Session = Depends(get_db)):
     return {"token": auth.create_token(db, user.id), "is_new": False}
 
 
+class DevLoginIn(BaseModel):
+    user_id: int
+
+
+@app.get("/api/auth/dev-users")
+def dev_users(db: Session = Depends(get_db)):
+    """개발자 입장: 고를 수 있는 가짜 프로필 목록(실제 계정과 메일은 나오지 않는다)."""
+    if not DEV_LOGIN:
+        raise HTTPException(404)
+    rows = db.scalars(select(User).where(User.is_synthetic.is_(True)).order_by(User.id))
+    return [
+        {"id": u.id, "name": u.name, "kind": u.kind, "dept": u.dept, "nationality": u.nationality, "bio": u.bio} for u in rows
+    ]
+
+
+@app.post("/api/auth/dev-login")
+def dev_login(body: DevLoginIn, db: Session = Depends(get_db)):
+    if not DEV_LOGIN:
+        raise HTTPException(404)
+    user = db.get(User, body.user_id)
+    if user is None:
+        raise HTTPException(404, "없는 사용자예요.")
+    if not user.is_synthetic:
+        raise HTTPException(403, "가짜 프로필 계정으로만 들어갈 수 있어요.")
+    return {"token": auth.create_token(db, user.id, auth.DEV_TOKEN_TTL), "is_new": False}
+
+
 @app.post("/api/auth/logout")
 def logout(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
     token = _bearer(authorization)
@@ -446,6 +495,10 @@ def list_matches(me: User = Depends(me_dep), db: Session = Depends(get_db)):
 @app.post("/api/matches/{match_id}/accept")
 def accept_match(match_id: int, me: User = Depends(me_dep), db: Session = Depends(get_db)):
     m = run(matching.accept, db, match_id, me.id)
+    if DEMO_PARTNERS and m.status == "proposed" and not me.is_synthetic:
+        partner = views.partner_of(db, m, me.id)
+        if partner.is_synthetic and not auth.has_active_session(db, partner.id):  # 시연: 가짜 상대는 바로 수락해 준다(팀원이 그 계정에 들어와 있으면 직접 수락)
+            m = run(matching.accept, db, match_id, partner.id)
     return views.match_view(db, m, me)
 
 
@@ -566,11 +619,38 @@ def get_messages(match_id: int, me: User = Depends(me_dep), db: Session = Depend
 
 
 @app.post("/api/matches/{match_id}/messages")
-async def post_message(match_id: int, body: MessageIn, me: User = Depends(me_dep), db: Session = Depends(get_db)):
+async def post_message(match_id: int, body: MessageIn, background: BackgroundTasks, me: User = Depends(me_dep), db: Session = Depends(get_db)):
     my_match(db, match_id, me, confirmed=True)
     payload = run(_save_message, db, match_id, me.id, body.text.strip())
     await hub.broadcast(match_id, payload)
+    background.add_task(_demo_reply, match_id, me.id)
     return payload
+
+
+_demo_tasks: set = set()  # 답장 작업이 끝나기 전에 사라지지 않게 붙들어 둔다
+
+
+async def _demo_reply(match_id: int, sender_id: int) -> None:
+    """시연용: 사람이 가짜 상대에게 말을 걸면 상대가 읽고(읽음 표시) 잠시 뒤 답장한다."""
+    if not DEMO_PARTNERS:
+        return
+    with SessionLocal() as db:
+        m = db.get(Match, match_id)
+        sender = db.get(User, sender_id)
+        if not m or m.status != "confirmed" or not sender or sender.is_synthetic:
+            return
+        partner = views.partner_of(db, m, sender_id)
+        if not partner.is_synthetic or auth.has_active_session(db, partner.id):  # 팀원이 직접 맡고 있으면 자동 답장은 쉰다
+            return
+        pid = partner.id
+        last_id = _mark_read(db, match_id, pid)
+        count = db.scalar(select(func.count(Message.id)).where(Message.match_id == match_id, Message.sender_id == pid)) or 0
+    await hub.broadcast(match_id, {"type": "read", "reader_id": pid, "last_read_id": last_id})
+    if DEMO_REPLY_DELAY > 0:
+        await asyncio.sleep(DEMO_REPLY_DELAY)
+    with SessionLocal() as db:
+        payload = _save_message(db, match_id, pid, DEV_REPLIES[count % len(DEV_REPLIES)])
+    await hub.broadcast(match_id, payload)
 
 
 @app.websocket("/ws/matches/{match_id}")
@@ -597,6 +677,9 @@ async def ws_chat(ws: WebSocket, match_id: int, token: str | None = None, user_i
             with SessionLocal() as db:
                 payload = _save_message(db, match_id, user_id, text)
             await hub.broadcast(match_id, payload)
+            task = asyncio.create_task(_demo_reply(match_id, user_id))
+            _demo_tasks.add(task)
+            task.add_done_callback(_demo_tasks.discard)
     except matching.MatchError:
         await ws.close(code=4403)
     except WebSocketDisconnect:
@@ -782,17 +865,11 @@ def report(body: ReportIn, me: User = Depends(me_dep), db: Session = Depends(get
 # ----------------------------------------------------------------- 개발용 도구
 @app.post("/api/dev/reset")
 def dev_reset(db: Session = Depends(get_db)):
-    """DB를 비우고 합성 프로필 40명을 다시 넣은 뒤 첫 배정을 돌린다."""
+    """DB를 비우고 가짜 프로필을 다시 넣은 뒤 첫 배정을 돌린다."""
     if not DEV_MODE:
         raise HTTPException(404)
     with matching_lock:
-        db.close()
-        Base.metadata.drop_all(engine)
-        Base.metadata.create_all(engine)
-        with SessionLocal() as s:
-            seed_demo(s)
-            n = matching.assign(s)
-    return {"users": 40, "matches": n}
+        return {"users": len(PERSONAS), "matches": reset_seed_data(db, preassign=True)}
 
 
 @app.post("/api/dev/matches/{match_id}/partner-accept")

@@ -22,7 +22,7 @@ class User(Base):
     nationality: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 선택 입력, 점수에 쓰지 않음
     langs: Mapped[list] = mapped_column(JSON, default=list)
     interests: Mapped[list] = mapped_column(JSON, default=list)
-    times: Mapped[list] = mapped_column(JSON, default=list)  # "수 오후" 형식
+    times: Mapped[list] = mapped_column(JSON, default=list)  # "수 13:00–14:00" 형식 (기존 "수 오후"도 읽기 호환)
     teach: Mapped[list] = mapped_column(JSON, default=list)  # 알려줄 수 있는 것
     learn: Mapped[list] = mapped_column(JSON, default=list)  # 배우고 싶은 것
     prefs: Mapped[list] = mapped_column(JSON, default=list)  # 만나기 전 브리핑에 공개되는 선호

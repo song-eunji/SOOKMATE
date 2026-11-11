@@ -1,0 +1,25 @@
+/* 알맹이 기본 프사: 별도의 색 타일 없이 캐릭터 실루엣을 그대로 보여준다. */
+.av.bean-avatar, .ticket .tt .av.bean-avatar {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+.bean-avatar-sprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: url("/avatars/beans-v1.png");
+  background-size: 200% 200%;
+  background-repeat: no-repeat;
+}
+
+/* 프로필 캐릭터의 색과 형태를 단순화한 전용 로고. */
+.bean-logo { display: block; flex: none; overflow: visible; }
+.logo { gap: 8px; }
+.wordmark, .login-word { font-family: "Arial Rounded MT Bold", "Trebuchet MS", var(--font); font-weight: 700; letter-spacing: -0.045em; color: #2f4058; }
+.wordmark { font-size: 25px; line-height: 1; }
+.login-word { font-size: 36px; }
+@media (max-width: 380px) { .logo .bean-logo { width: 40px; height: 32px; } .wordmark { font-size: 21px; } }
+
+.login-brand .logomark { width: 95px; height: 76px; }

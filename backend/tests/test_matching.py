@@ -4,6 +4,7 @@ from collections import Counter
 from sqlalchemy import select
 
 from app import matching
+from app.constants import expand_times
 from app.models import Match, User
 from app.util import week_of
 
@@ -37,11 +38,11 @@ def assert_invariants(db):
         assert n <= users[uid].weekly_cap
 
 
-def test_seed_is_unbalanced_40(db):
+def test_seed_is_unbalanced_50(db):
     users = db.scalars(select(User)).all()
-    assert len(users) == 40
-    assert sum(u.kind == "domestic" for u in users) == 26
-    assert sum(u.kind == "international" for u in users) == 14
+    assert len(users) == 50
+    assert sum(u.kind == "domestic" for u in users) == 16
+    assert sum(u.kind == "international" for u in users) == 34
 
 
 def test_initial_assignment_respects_rules(db):
@@ -127,10 +128,10 @@ def test_expired_proposal_frees_slot(db):
 
 def test_reason_only_uses_real_overlap(db):
     d = db.get(User, 1)
-    i = db.get(User, 27)  # 하루카
+    i = db.get(User, 17)  # 하루카
     ex = matching.explain(d, i)
     assert ex["common_interests"] == ["전시", "카페"]
-    assert ex["common_times"] == ["수 오후", "금 오전"]
+    assert sorted(ex["common_times"]) == sorted(expand_times(["수 오후", "금 오전", "목 저녁"]))
     assert ex["mutual"] is True
     # 겹치는 게 없으면 없는 근거를 만들지 않는다
     d.interests, d.times, d.teach, d.learn = [], [], [], []
@@ -146,7 +147,7 @@ def test_similar_pairs_shows_close_but_not_identical_interests():
 
 
 def test_reason_mentions_similar_interests(db):
-    d, i = db.get(User, 1), db.get(User, 27)
+    d, i = db.get(User, 1), db.get(User, 17)
     d.interests, i.interests = ["한국어 표현"], ["한국어"]
     d.times, d.teach, d.learn = [], [], []
     ex = matching.explain(d, i)

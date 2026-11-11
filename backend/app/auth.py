@@ -200,10 +200,13 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_token(db: Session, user_id: int) -> str:
+DEV_TOKEN_TTL = timedelta(hours=12)  # 개발자 입장으로 받은 세션은 짧게
+
+
+def create_token(db: Session, user_id: int, ttl: timedelta | None = None) -> str:
     token = secrets.token_urlsafe(32)
     now = utcnow()
-    db.add(AuthToken(token_hash=_token_hash(token), user_id=user_id, created_at=now, expires_at=now + TOKEN_TTL))
+    db.add(AuthToken(token_hash=_token_hash(token), user_id=user_id, created_at=now, expires_at=now + (ttl or TOKEN_TTL)))
     db.commit()
     return token
 
@@ -217,6 +220,11 @@ def user_from_token(db: Session, token: str) -> User | None:
         db.commit()
         return None
     return db.get(User, row.user_id)
+
+
+def has_active_session(db: Session, user_id: int) -> bool:
+    """지금 누군가 이 계정으로 로그인해 있는지(만료되지 않은 세션이 있는지)."""
+    return db.scalars(select(AuthToken.id).where(AuthToken.user_id == user_id, AuthToken.expires_at > utcnow())).first() is not None
 
 
 def revoke_token(db: Session, token: str) -> None:

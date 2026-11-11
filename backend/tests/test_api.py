@@ -20,7 +20,7 @@ def confirm(client, uid=1):
 
 def test_options_and_me(client):
     o = client.get("/api/options").json()
-    assert len(o["time_slots"]) == 15 and abs(sum(o["weights"].values()) - 1) < 1e-9
+    assert len(o["time_slots"]) == 65 and abs(sum(o["weights"].values()) - 1) < 1e-9
     me = client.get("/api/me", headers=h(1)).json()
     assert me["name"] == "수아" and me["weekly_cap"] == 2 and me["used_this_week"] <= 2
 
@@ -148,7 +148,7 @@ def test_other_users_match_is_hidden(client):
 
 def test_basic_info_validation_and_visibility(client):
     me = client.get("/api/me", headers=h(1)).json()
-    assert me["onboarded"] is False  # 데모 사용자는 기본 정보 입력부터 시작
+    assert me["onboarded"] is True  # 가짜 프로필은 기본 정보까지 채워져 있다
     ok = {"name": " 수아수아 ", "bio": "카페에서 수다 떨기 좋아해요"}
 
     assert client.put("/api/me/basic", headers=h(1), json={**ok, "name": "  "}).status_code == 422
@@ -165,7 +165,7 @@ def test_basic_info_validation_and_visibility(client):
     assert client.put("/api/me/basic", headers=h(1), json={**ok, "bio": ""}).status_code == 200
 
     # 상대에게는 닉네임·아바타·소개만 보이고 이메일·국적은 안 보인다
-    partner_view = client.get("/api/matches", headers=h(27)).json()
+    partner_view = client.get("/api/matches", headers=h(17)).json()
     mine = [m["partner"] for m in partner_view if m["partner"]["id"] == 1]
     for p in mine:
         assert p["name"] == "수아수아" and p["bio"] == ""
@@ -220,4 +220,4 @@ def test_ui_language_is_saved_per_user(client):
     assert client.get("/api/me", headers=h(1)).json()["ui_lang"] == "ja"
     assert client.get("/api/me", headers=h(2)).json()["ui_lang"] == "ko"  # 다른 사용자는 그대로
     # 일본 유학생 시드는 일본어 화면으로 시작한다
-    assert client.get("/api/me", headers=h(27)).json()["ui_lang"] == "ja"
+    assert client.get("/api/me", headers=h(17)).json()["ui_lang"] == "ja"
