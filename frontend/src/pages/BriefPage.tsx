@@ -65,7 +65,7 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, go
           )}
           {card && (
             <p className="hint">
-              {card.title}
+              {t(card.title)}
               {card.mode === "fallback" ? ` ${t("(기본 카드)")}` : ""}
             </p>
           )}
