@@ -157,3 +157,14 @@ class AIQuota(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     blocked_until: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(40))
+
+
+class Appointment(Base):
+    """매칭당 현재 약속. version으로 오래된 화면의 응답을 차단한다."""
+    __tablename__ = "appointments"
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), primary_key=True)
+    date: Mapped[str] = mapped_column(String(10))
+    slot: Mapped[str] = mapped_column(String(30))
+    proposer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(16), default="proposed")
+    version: Mapped[int] = mapped_column(Integer, default=1)

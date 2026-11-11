@@ -215,3 +215,17 @@ DB에는 기존과 같은 timezone 없는 UTC를 사용하며, 추천 기한 48�
 
 `cd backend && python -m pytest` (72개), `cd frontend && npm run build`.
 브라우저에서 기록 저장 → 추천 생성 → 근거·자료 표시 → 채팅 제안 수신 → 비교·평가 저장을 실제 무료 모델로 확인했습니다.
+
+## 만남 시간 제안·확정
+
+양쪽이 수락한 만남의 **대화 탭 상단 → 만남 약속 → 시간 제안하기**에서 날짜와 1시간 구간을 고릅니다.
+한국 시간 기준 앞으로 2주 안의 공통 가능 시간만 표시하며, 다른 상대와 이미 확정한 시간은 제외합니다.
+상대가 **이 시간에 만나요**를 누르면 약속이 확정됩니다. 거절·제안 취소·약속 취소 후 다시 제안할 수 있습니다.
+약속 상태는 DB에 저장되고, 화면은 10초 간격 또는 창으로 돌아왔을 때 갱신됩니다.
+
+- `GET /api/matches/{id}/appointment`: 현재 약속과 공통 날짜·시간 조회
+- `POST /api/matches/{id}/appointment`: `{date, slot, version}`으로 제안
+- `POST /api/matches/{id}/appointment/respond`: `{action: accept|decline|cancel, version}`으로 응답
+- `date`는 `YYYY-MM-DD`, `slot`은 `13:00–14:00` 형식입니다. 첫 제안의 `version`은 0이며 이후에는 조회 결과의 버전을 사용합니다.
+- 이미 바뀐 제안에 응답하면 409를 반환합니다. 기존 단일 프로세스·worker 1개 운영 조건을 유지합니다.
+- 서버를 재시작하면 기존 DB에 `appointments` 테이블이 추가됩니다. 기존 프로필·대화 데이터는 유지됩니다.
