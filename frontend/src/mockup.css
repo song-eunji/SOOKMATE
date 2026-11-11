@@ -312,6 +312,10 @@ nav button.on::before { content: ""; position: absolute; top: 0; left: 30%; righ
 .cap-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .cap-row .cap { margin-bottom: 0; }
 .cap-row .link { min-height: 36px; font-weight: 700; color: var(--ink); }
+.cap-row h2 { margin: 0; }
+/* 가능한 시간: 모두 · 비우기를 제목 줄 오른쪽에 글자로 */
+.quick-links { display: flex; align-items: center; gap: 2px; color: var(--muted); }
+.quick-links .link { min-height: 36px; padding: 0 6px; font-size: 14px; }
 .ticket .tm .swap { margin-top: 6px; }
 .ticket .swap > div { display: flex; flex-direction: column; gap: 2px; min-height: 74px; }
 .ticket .swap .none { font-size: 13.5px; color: var(--muted); }

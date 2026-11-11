@@ -37,6 +37,7 @@ const D: Record<string, Tr> = {
   점: ["pts", "点", "分", "điểm"],
   "상대를 누르면 대화 · 준비 · 노트가 나와요.": ["Tap a person to see chat, prep and notes.", "相手をタップするとトーク・準備・ノートが開きます。", "点击对方即可查看聊天、准备和笔记。", "Chạm vào một người để xem chat, chuẩn bị và ghi chú."],
   "겹치는 시간": ["Shared times", "共通の時間", "共同时间", "Giờ trùng"],
+  "정확한 약속은 대화에서 정해요.": ["The exact plan is set in the chat.", "正確な約束はチャットで決めます。", "具体约定在聊天中再定。", "Hẹn cụ thể sẽ chốt trong cuộc trò chuyện."],
   "{n}개 더 보기": ["Show {n} more", "あと{n}件を表示", "再显示 {n} 个", "Xem thêm {n}"],
   "겹치는 관심사가 없어요": ["No shared interests", "共通の興味はありません", "没有共同兴趣", "Chưa có sở thích chung"],
   "겹치는 시간이 없어요": ["No shared times", "共通の時間はありません", "没有共同时间", "Chưa có giờ trùng"],
