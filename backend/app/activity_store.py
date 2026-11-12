@@ -4,6 +4,7 @@
 """
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
@@ -16,6 +17,8 @@ from .activity_eval import RUBRIC, evaluate
 from .models import ActivityRun, AIQuota
 from .next_activity import analyze, generate
 from .activity_search import search_sources
+
+log = logging.getLogger(__name__)
 
 # 매치(두 사람)마다 따로 잠근다. 서버 전체 잠금이면 다른 커플의 생성 때문에 내 요청이 막힌다.
 _locks: dict[int, threading.Lock] = {}
@@ -101,6 +104,7 @@ def run(db, mid, user_id, ex, notes, compare, regenerate=False):
             result = generate(ex, notes, found["sources"], analysis, avoid=avoid)
             record_quota(db, result["llm_status"])
             if result["generation_mode"] != "llm":
+                log.warning("활동 생성 실패 match=%s llm_status=%s", mid, result["llm_status"])
                 raise HTTPException(503, "AI가 활동을 만들지 못했어요. 잠시 후 다시 시도해 주세요.")
             result.update(analysis=analysis, search_status=found["status"], search_provider=found["provider"],
                           search_providers=found["providers"], query=analysis["query"],
@@ -116,6 +120,7 @@ def run(db, mid, user_id, ex, notes, compare, regenerate=False):
             baseline = generate(ex, notes, [], analysis, avoid=result.get("avoided") or [])
             record_quota(db, baseline["llm_status"])
             if baseline["generation_mode"] != "llm":
+                log.warning("검색 없는 비교 생성 실패 match=%s llm_status=%s", mid, baseline["llm_status"])
                 raise HTTPException(503, "검색 없는 추천을 만들지 못했어요. 먼저 만든 추천은 그대로 저장되어 있어요.")
             evaluation = evaluate(notes, analysis, result, baseline, seed=row.id)
             row.payload = {**row.payload, "baseline": baseline, "evaluation": evaluation,
