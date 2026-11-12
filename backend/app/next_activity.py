@@ -110,6 +110,9 @@ def neutralize_labels(data: dict) -> dict:
     return out
 
 
+TRANSIENT_LLM_FAILURES = {"timeout", "connection_error", "service_unavailable", "incomplete_response", "invalid_response"}
+
+
 def generate(ex: dict, notes: list[str], sources: list[dict], analysis: dict | None = None,
              avoid: list[str] | None = None) -> dict:
     start = time.perf_counter()
@@ -165,10 +168,16 @@ def generate(ex: dict, notes: list[str], sources: list[dict], analysis: dict | N
             return "no_citation"
         return ""
 
-    # 형식이 어긋난 답(인용 ID 오류·길이 초과 등)은 한 번만 다시 요청한다. 한도·연결 실패는 재시도하지 않는다.
+    # 형식이 어긋난 답(인용 ID 오류·길이 초과 등)은 한 번만 다시 요청한다.
+    # 일시적인 실패(시간 초과·연결 끊김·응답 잘림·JSON 아님)는 한 번 더 시도한다. 한도 초과는 재시도하지 않는다.
     reasons, feedback, similar_fallback = [], "", None
+    transient_left = 1
     for _ in range(3 if avoid else 2):
         data = ask(feedback)
+        if data is None and transient_left and ai.llm_status().get("status") in TRANSIENT_LLM_FAILURES:
+            transient_left -= 1
+            time.sleep(1)
+            data = ask(feedback)
         if isinstance(data, dict):
             data = neutralize_labels(data)
         reasons.append(reject_reason(data) if data else "")

@@ -256,8 +256,9 @@ def _gemini_text(model: str, key: str, system: str, user: str, config: dict, max
         return None, response.status_code in (404, 429, 500, 502, 503, 504)
     candidates = response.json().get("candidates", [])
     if not candidates or candidates[0].get("finishReason") != "STOP":
+        # 응답이 잘렸거나 차단됐다: 다음 모델이 정상 응답할 수 있으니 넘겨 본다.
         _set_llm_status("incomplete_response", **config)
-        return None, False
+        return None, True
     parts = candidates[0].get("content", {}).get("parts", [])
     return "".join(part.get("text", "") for part in parts if not part.get("thought")), False
 
