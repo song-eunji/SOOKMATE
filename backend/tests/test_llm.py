@@ -192,7 +192,7 @@ def test_brief_sends_preference_docs_to_llm(client, monkeypatch, db):
 def test_brief_without_docs_asks_questions_only_in_reader_language(client, monkeypatch):
     m = confirmed_match(client)
     set_lang(client, 1, "en")
-    monkeypatch.setattr(ai, "retrieve", lambda *a, **k: [])
+    monkeypatch.setattr(ai, "culture_docs", lambda: [])  # 참고할 자료가 하나도 없는 상황
     fake = FakeLLM({"questions": ["What kind of place feels comfortable for you?"]})
     monkeypatch.setattr(ai, "llm_json", fake)
     b = client.get(f"/api/matches/{m['id']}/brief", headers=h(1)).json()

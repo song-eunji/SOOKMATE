@@ -932,3 +932,9 @@ async def dev_partner_message(match_id: int, me: User = Depends(me_dep), db: Ses
     payload = run(_save_message, db, match_id, partner.id, DEV_REPLIES[count % len(DEV_REPLIES)])
     await hub.broadcast(match_id, payload)
     return {"ok": True}
+
+
+# 배포: 빌드한 프론트엔드가 있으면 같은 서버에서 함께 내보낸다. (다른 모든 경로가 정해진 뒤에 붙여야 한다)
+from .static_site import mount_frontend  # noqa: E402
+
+mount_frontend(app)

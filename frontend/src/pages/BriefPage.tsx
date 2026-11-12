@@ -18,8 +18,21 @@ interface Props {
   onPicked?: (qs: string[]) => void;
 }
 
+/** AI 없이 만든 기본 질문(정해진 문장)은 화면 언어로 바꿔 보여준다. AI가 이미 그 언어로 쓴 질문은 그대로 둔다. */
+const QUESTION_TEMPLATES = [
+  /^(.+) 관련해서 요즘 관심 있는 게 있어요\?$/,
+  /^(.+)은\(는\) 어떻게 알려줄 수 있어요\?$/,
+];
+
 export default function BriefPage({ active, confirmed, onPick, goRec, goNote, goChat, flash, picked = [], onPicked }: Props) {
   const { t, tv, lang } = useI18n();
+  const localizeQuestion = (q: string) => {
+    for (const re of QUESTION_TEMPLATES) {
+      const m = q.match(re);
+      if (m) return t(re === QUESTION_TEMPLATES[0] ? "{x} 관련해서 요즘 관심 있는 게 있어요?" : "{x}은(는) 어떻게 알려줄 수 있어요?", { x: tv(m[1]) });
+    }
+    return t(q);
+  };
   const [brief, setBrief] = useState<Brief | null>(null);
   const [card, setCard] = useState<ActivityCard | null>(null);
   const matchId = active?.id ?? null;
@@ -64,12 +77,6 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, go
           ) : (
             <p className="hint">{t("정해지지 않았어요")}</p>
           )}
-          {card && (
-            <p className="hint">
-              {t(card.title)}
-              {card.mode === "fallback" ? ` ${t("(기본 카드)")}` : ""}
-            </p>
-          )}
         </section>
 
         <section className="sec">
@@ -101,7 +108,7 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, go
             <section className="sec">
               <h2>{t("물어볼 질문 · 눌러서 대화로 가져가요")}</h2>
               <div className="qlist">
-                {brief.questions.map((q) => {
+                {brief.questions.map(localizeQuestion).map((q) => {
                   const on = picked.includes(q);
                   return (
                     <button key={q} type="button" className={`q ${on ? "on" : ""}`} aria-pressed={on} onClick={() => togglePick(q)}>
@@ -125,21 +132,16 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, go
               ) : (
                 <p className="hint">{t("공개한 선호가 없어요. 직접 물어보면 좋아요.")}</p>
               )}
-              <p className="hint">{t("개인 선호가 문화 일반 정보보다 우선이에요. 국적으로 성향을 추정하지 않아요.")}</p>
             </section>
 
             {brief.tips.length > 0 && (
               <section className="sec">
-                <h2>{t("참고할 문화 정보")}</h2>
+                <h2>{brief.culture_country ? t("참고할 {country} 문화 정보", { country: t(brief.culture_country) }) : t("참고할 문화 정보")}</h2>
                 <ul className="list">
                   {brief.tips.map((tip) => (
-                    <li key={tip.source_id}>
-                      {tip.text}
-                      <small>{t("출처 · {source}", { source: tip.source })}</small>
-                    </li>
+                    <li key={tip.source_id}>{tip.text}</li>
                   ))}
                 </ul>
-                {brief.mode === "fallback" && <p className="hint">{t("AI가 만든 문장이 아니라 검토 자료를 그대로 보여주는 기본 안내예요.")}</p>}
               </section>
             )}
           </>

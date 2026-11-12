@@ -139,11 +139,19 @@ export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Prop
       </section>
 
       <section className="sec block">
-        <h2>
-          {t("이번 주 가능한 시간")}
-        </h2>
-        <p className="hint">{t("1시간 단위로 가능한 시간을 선택해 주세요. 정확한 약속은 대화에서 정해요.")}</p>
-        {me.times.some((value) => / (오전|오후|저녁)$/.test(value)) && <p className="hint">{t("기존 오전·오후·저녁을 시간별로 펼쳤어요. 실제 가능한 시간만 남기고 저장해 주세요.")}</p>}
+        <div className="cap-row">
+          <h2>{t("이번 주 가능한 시간")}</h2>
+          <div className="quick-links">
+            <button type="button" className="link" onClick={() => set("times", opts.days.flatMap((d) => opts.slots.map((s) => `${d} ${s}`)))}>
+              {t("모두")}
+            </button>
+            <span aria-hidden="true">·</span>
+            <button type="button" className="link" onClick={() => set("times", [])}>
+              {t("비우기")}
+            </button>
+          </div>
+        </div>
+        <p className="hint">{t("정확한 약속은 대화에서 정해요.")}</p>
         <TimePicker days={opts.days} slots={opts.slots} value={f.times} onChange={(v) => set("times", v)} />
       </section>
 
@@ -201,7 +209,6 @@ export default function ProfilePage({ me, opts, onSaved, onLogout, flash }: Prop
 /** 요일별 한 줄 + 빠른 선택. 칸마다 라벨이 있어서 무슨 시간인지 바로 읽힌다. */
 function TimePicker({ days, slots, value, onChange }: { days: string[]; slots: string[]; value: string[]; onChange: (v: string[]) => void }) {
   const { t } = useI18n();
-  const all = days.flatMap((d) => slots.map((s) => `${d} ${s}`));
   const toggle = (k: string) => onChange(value.includes(k) ? value.filter((x) => x !== k) : [...value, k]);
   const toggleDay = (day: string) => {
     const keys = slots.map((slot) => `${day} ${slot}`);
@@ -210,14 +217,6 @@ function TimePicker({ days, slots, value, onChange }: { days: string[]; slots: s
 
   return (
     <div className="times">
-      <div className="quick">
-        <button type="button" className="sg" onClick={() => onChange(all)}>
-          {t("모두")}
-        </button>
-        <button type="button" className="sg" onClick={() => onChange([])}>
-          {t("비우기")}
-        </button>
-      </div>
       <div className="tgrid" style={{ gridTemplateColumns: `88px repeat(${days.length}, minmax(0, 1fr))` }}>
         <span />
         {days.map((d) => (

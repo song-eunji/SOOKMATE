@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getAppointment, proposeAppointment, respondAppointment, type AppointmentState } from "../api";
+import Icon from "../Icon";
 import { useI18n } from "../i18n";
 import "./appointment.css";
 
@@ -9,6 +10,7 @@ export default function AppointmentCard({ matchId }: { matchId: number }) {
   const [date, setDate] = useState("");
   const [slot, setSlot] = useState("");
   const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const alive = useRef(false);
@@ -25,10 +27,11 @@ export default function AppointmentCard({ matchId }: { matchId: number }) {
     window.addEventListener("focus", refresh);
     return () => { alive.current = false; clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [matchId]);
+  useEffect(() => { if (state?.proposal?.status === "proposed" && !state.proposal.mine && !state.proposal.past) setOpen(true); }, [state?.proposal?.status, state?.proposal?.mine, state?.proposal?.past]);
   const run = async (job: () => Promise<AppointmentState>) => {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError("");
-    try { const result = await job(); if (alive.current) { setState(result); setEditing(false); } }
+    try { const result = await job(); if (alive.current) { setState(result); setEditing(false); } window.dispatchEvent(new Event("appointment-changed")); }
     catch (e) {
       if (alive.current) setError((e as Error).message);
       try { const result = await getAppointment(matchId); if (alive.current) setState(result); } catch { /* 원래 오류 유지 */ }
@@ -39,10 +42,15 @@ export default function AppointmentCard({ matchId }: { matchId: number }) {
   const dates = state?.available ?? [];
   const slots = dates.find((day) => day.date === date)?.slots ?? [];
   const formatDate = (value: string) => new Date(`${value}T12:00:00+09:00`).toLocaleDateString(lang, {month: "short", day: "numeric", weekday: "short", timeZone: "Asia/Seoul"});
-  return <section className="appointment-card" aria-label={t("만남 약속")}>
-    <div className="appointment-heading"><h2>{t("만남 약속")}</h2><small>{t("한국 시간 기준")}</small></div>
+  const shown = open || editing;
+  return <section className={`appointment-card${shown ? "" : " collapsed"}`} aria-label={t("만남 약속")}>
+    <button type="button" className="appointment-heading" aria-expanded={shown} onClick={() => !editing && setOpen((v) => !v)}>
+      <h2>{t("만남 약속")}</h2>
+      <small>{!shown && active ? `${formatDate(proposal.date)} · ${proposal.slot}` : t("한국 시간 기준")}</small>
+      <span className="appointment-toggle" aria-hidden="true"><Icon name={shown ? "up" : "down"} /></span>
+    </button>
     {error && <p role="alert" className="appointment-error">{t(error)}</p>}
-    {!state ? <button type="button" className="link" onClick={() => void run(() => getAppointment(matchId))}>{t(error ? "다시 시도하기" : "불러오는 중…")}</button> : active ? <>
+    {!shown ? null : !state ? <button type="button" className="link" onClick={() => void run(() => getAppointment(matchId))}>{t(error ? "다시 시도하기" : "불러오는 중…")}</button> : active ? <>
       <p className="appointment-time">{formatDate(proposal.date)} · {proposal.slot}</p>
       <p role="status">{t(proposal.status === "confirmed" ? "약속이 확정됐어요" : proposal.mine ? "상대의 수락을 기다리고 있어요" : "상대가 만남 시간을 제안했어요")}</p>
       <div className="row">

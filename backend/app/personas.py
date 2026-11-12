@@ -8,7 +8,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from .constants import DAYS, DEFAULT_WEEKLY_CAP, expand_times
-from .models import Appointment, AuthToken, Block, ChatRead, Match, Message, Note, Report, User
+from .models import Appointment, AppointmentEvent, AuthToken, Block, ChatRead, Match, Message, Note, Report, User
 
 ALL = "월화수목금:오전오후저녁"
 
@@ -84,16 +84,16 @@ PERSONAS: list[dict] = [
       [KOREAN, CAMPUS], ["English 회화", "몽골 문화"], ["천천히 말하는 걸 좋아해요"]),
     # ------------------------------------------------------------- 유학생 34명 (id 17~50)
     # 일본 4
-    I("하루카", "일본", "한국어학당", "韓国のカフェ巡りが好きです。ゆっくり話してね", ["日本語", "한국어"], ["카페", "전시", "사진"], "수:오후 금:오전 목:저녁",
+    I("하루카", "일본", "한국어학당", "韓国のカフェ巡りが好きです。ゆっくり話してね", ["日本語", "한국어"], ["카페", "전시", "사진", "音楽"], "수:오후 금:오전 목:저녁",
       ["일본어 일상 표현", "일본 문화"], [CAMPUS, ORDER], [QUIET, "매운 음식은 피해요"], "ja"),
-    I("Yuki", "일본", "경영학부", "韓国ドラマで韓国語を勉強中です！", ["日本語", "한국어", "English"], ["드라마", "K-pop", "맛집", "카페"], ALL,
+    I("Yuki", "일본", "경영학부", "韓国ドラマで韓国語を勉強中です！", ["日本語", "한국어", "English"], ["드라마", "K-pop", "맛집", "카페", "映画"], ALL,
       ["일본어 일상 표현", "일본 문화"], [KOREAN, CAFE], (), "ja"),
     I("Mio", "일본", "국제학부", "写真と散歩が好き。英語でも大丈夫です", ["日本語", "English"], ["사진", "산책", "전시"], "월화목:오후저녁 금:오전오후",
       ["일본 문화", "일본어 일상 표현"], [HOMEWORK, CAMPUS], [SLOW], "ja"),
     I("Nanami", "일본", "한국어학당", "料理とボードゲームが好きです", ["日本語", "한국어"], ["요리", "보드게임", "맛집"], "월수금:오전오후저녁",
       ["일본 문화"], [KOREAN, ORDER], ["매운 음식은 피해요"], "ja"),
     # 중국 4
-    I("Wei", "중국", "경영학부", "我喜欢咖啡馆和K-pop，想多练习韩语", ["中文", "한국어"], ["카페", "K-pop", "음악"], "화목:오전오후저녁 월금:오후",
+    I("Wei", "중국", "경영학부", "我喜欢咖啡馆和K-pop，想多练习韩语", ["中文", "한국어"], ["카페", "K-pop", "음악", "电影"], "화목:오전오후저녁 월금:오후",
       ["중국어 표현", "중국 문화"], [KOREAN, CAFE], (), "zh"),
     I("Mei", "중국", "미디어학부", "喜欢看展览和拍照，欢迎一起逛展", ["中文", "English"], ["전시", "사진", "여행"], "월수금:오전오후 목:저녁",
       ["중국 문화"], [CAMPUS, HOMEWORK], (), "zh"),
@@ -114,7 +114,7 @@ PERSONAS: list[dict] = [
     I("Trang", "베트남", "한국어학당", "Mình mới đến Hàn, cần bạn giúp làm quen", ["Tiếng Việt", "한국어"], ["드라마", "K-pop", "맛집"], "월화수목금:오전오후",
       ["베트남어 기초"], [HOMEWORK, KOREAN], (), "vi"),
     # 미국 3
-    I("Emily", "미국", "교환학생", "Exchange student into cafes & hiking", ["English", "한국어"], ["카페", "산책", "여행", "사진"], "수목금:오전오후저녁",
+    I("Emily", "미국", "교환학생", "Exchange student into cafes & hiking", ["English", "한국어"], ["카페", "산책", "여행", "사진", "music"], "수목금:오전오후저녁",
       ["English 회화", "미국 대학 문화"], [KOREAN, CAFE]),
     I("Jessica", "미국", "교환학생", "K-drama fan! Let's swap English & Korean", ["English"], ["드라마", "K-pop", "영화"], "월화:오후저녁 목금:오전",
       ["English 회화"], [KOREAN, ORDER], [SLOW]),
@@ -186,7 +186,7 @@ def replace_personas(db: Session) -> dict:
         in_match = or_(Match.domestic_id.in_(fake), Match.international_id.in_(fake))
         match_ids = set(db.scalars(select(Match.id).where(in_match)))
         if match_ids:
-            for model in (Appointment, Message, Note, ChatRead, Report):
+            for model in (AppointmentEvent, Appointment, Message, Note, ChatRead, Report):
                 db.execute(delete(model).where(model.match_id.in_(match_ids)))
             db.execute(delete(Match).where(Match.id.in_(match_ids)))
         db.execute(delete(Report).where(or_(Report.reporter_id.in_(fake), Report.target_id.in_(fake))))

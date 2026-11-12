@@ -165,10 +165,20 @@ export const generateActivity = (id: number, regenerate = false) => req<import("
 export const loadActivity = (id: number) => req<import("./types").SavedActivity | null>(`/matches/${id}/activity-result`);
 export const saveActivityRatings = (id: number, run_id: number, ratings: Record<string, number>) => req<{ok: boolean}>(`/matches/${id}/activity-ratings`, {method: "PUT", body: JSON.stringify({run_id, ratings})});
 
+export interface AppointmentEvent {
+  id: number;
+  kind: "proposed" | "confirmed" | "declined" | "cancelled";
+  date: string;
+  slot: string;
+  mine: boolean;
+  created_at: string;
+}
 export interface AppointmentState {
   timezone: string;
   available: {date: string; slots: string[]}[];
   proposal: {date: string; slot: string; status: "proposed" | "confirmed" | "declined" | "cancelled"; version: number; mine: boolean; past: boolean} | null;
+  /** 제안·확정·거절·취소 기록(오래된 것부터). 대화방에 약속 카드로 보여준다. */
+  events: AppointmentEvent[];
 }
 export const getAppointment = (id: number) => req<AppointmentState>(`/matches/${id}/appointment`);
 export const proposeAppointment = (id: number, date: string, slot: string, version: number) => post<AppointmentState>(`/matches/${id}/appointment`, {date, slot, version});
