@@ -31,7 +31,7 @@ export default function AppointmentCard({ matchId }: { matchId: number }) {
   const run = async (job: () => Promise<AppointmentState>) => {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError("");
-    try { const result = await job(); if (alive.current) { setState(result); setEditing(false); } }
+    try { const result = await job(); if (alive.current) { setState(result); setEditing(false); } window.dispatchEvent(new Event("appointment-changed")); }
     catch (e) {
       if (alive.current) setError((e as Error).message);
       try { const result = await getAppointment(matchId); if (alive.current) setState(result); } catch { /* 원래 오류 유지 */ }

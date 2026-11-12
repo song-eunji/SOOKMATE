@@ -168,3 +168,15 @@ class Appointment(Base):
     proposer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(16), default="proposed")
     version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class AppointmentEvent(Base):
+    """약속이 제안·확정·거절·취소된 기록. 대화방에서 시간 순서대로 약속 카드를 보여주는 데 쓴다."""
+    __tablename__ = "appointment_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), index=True)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(16))  # proposed | confirmed | declined | cancelled
+    date: Mapped[str] = mapped_column(String(10))
+    slot: Mapped[str] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -405,3 +405,12 @@ nav button.on svg { stroke-width: 2.3; }
 .chat .chat-pin-head b.muted { font-weight: 500; color: var(--muted); }
 /* 다음 활동 추천 접힌 줄: 글자 크기·굵기를 만남 약속 제목과 같게 (색은 그대로) */
 .chat .chat-pin-head small, .chat .chat-pin-head b, .chat .chat-pin-head b.muted { font-size: 14px; font-weight: 700; line-height: 1.4; }
+
+/* 대화 속 약속 카드: 제안·거절·취소는 가운데 작은 안내, 확정은 눈에 띄는 카드 */
+.appt-msg { align-self: center; display: grid; justify-items: center; gap: 2px; max-width: 88%; text-align: center; color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+.appt-msg small { font-size: 12px; font-variant-numeric: tabular-nums; }
+.appt-msg.proposed span, .appt-msg.declined span, .appt-msg.cancelled span { font-weight: 600; }
+.appt-msg.confirmed { width: min(100%, 280px); gap: 4px; padding: 14px 16px; border-radius: 16px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
+.appt-msg.confirmed b { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--accent-ink); }
+.appt-msg.confirmed strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+.appt-msg.confirmed small { color: var(--muted); }
