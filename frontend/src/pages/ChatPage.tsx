@@ -40,16 +40,24 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
   }, [matchId]);
   if (stored === undefined) return null;
   if (!stored) return (
-    <div className="chat-pin empty">
-      <span><Icon name="pin" /> {t("아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.")}</span>
-      <button className="link" onClick={goNote}>{t("노트 쓰러 가기 →")}</button>
-    </div>
+    <section className="chat-pin empty" aria-label={t("다음 활동 추천")}>
+      <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span><small>{t("다음 활동 추천")}</small></span>
+        <span className="chat-pin-toggle" aria-hidden="true"><Icon name={open ? "up" : "down"} /></span>
+      </button>
+      {open && (
+        <div className="chat-pin-body">
+          <p>{t("아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.")}</p>
+          <button className="link" onClick={goNote}>{t("노트 쓰러 가기 →")}</button>
+        </div>
+      )}
+    </section>
   );
   const act = stored.retrieval;
   return (
     <section className={`chat-pin${open ? " open" : ""}`} aria-label={t("다음 활동 추천")}>
       <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <span><small><Icon name="pin" /> {t("다음 활동 추천")}</small><b>{act.title}</b></span>
+        <span><small>{t("다음 활동 추천")}</small><b>{act.title}</b></span>
         <span className="chat-pin-toggle" aria-hidden="true"><Icon name={open ? "up" : "down"} /></span>
       </button>
       {open && (

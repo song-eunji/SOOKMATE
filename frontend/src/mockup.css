@@ -382,3 +382,26 @@ nav button.on svg { stroke-width: 2.3; }
 .tgrid .day-toggle { min-height: 40px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; color: var(--muted); }
 .tgrid .day-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .tgrid .tcell { min-height: 40px; }
+
+/* 교류 노트 · 내 기록: 제목·수정 버튼·공유 표시 정리 */
+.notes-section-head { margin-bottom: 4px; }
+.notes-section-head h2, .notes-panel > h2 { color: var(--ink); font-size: 15px; gap: 0; }
+.notes-section-head .notes-num { margin-right: 10px; }
+.notes-entry-label > span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.notes-entry-label small { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.notes-entries article { padding: 14px 0; }
+.notes-entries article > p { margin-top: 6px; color: var(--ink); line-height: 1.55; }
+.notes-intro p { white-space: pre-line; }
+
+/* 다음 활동 추천: 만남 약속 카드와 같은 틀(가로 전체 폭, 흰 배경, 아래 선, 같은 여백)로 맞춘다 */
+.chat .chat-pin { margin: 0; border-radius: 0; background: var(--paper); box-shadow: none; border-bottom: 1px solid var(--line); flex: none; }
+.chat .chat-pin.empty { padding: 12px 18px; }
+.chat .chat-pin-head { padding: 12px 18px; }
+.chat .chat-pin-head > span:first-child { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chat .chat-pin-head small { flex: none; white-space: nowrap; }
+.chat .chat-pin-head b { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat .chat-pin-body { padding: 0 18px 14px; max-height: 35vh; }
+.chat .chat-pin.empty { display: block; padding: 0; font-size: inherit; color: inherit; }
+.chat .chat-pin-head b.muted { font-weight: 500; color: var(--muted); }
+/* 다음 활동 추천 접힌 줄: 글자 크기·굵기를 만남 약속 제목과 같게 (색은 그대로) */
+.chat .chat-pin-head small, .chat .chat-pin-head b, .chat .chat-pin-head b.muted { font-size: 14px; font-weight: 700; line-height: 1.4; }
