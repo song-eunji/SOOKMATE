@@ -164,6 +164,8 @@ export interface ActivitySource {
   provider?: "library" | "wikipedia" | "google"; matched?: string[]; minutes?: number; cost?: string;
 }
 export interface GeneratedActivity extends NextActivity {
+  language?: string;
+  translation_status?: "original" | "translated" | "failed";
   analysis?: NoteAnalysis;
   reason: string;
   steps: string[];

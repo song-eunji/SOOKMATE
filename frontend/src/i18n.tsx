@@ -9,6 +9,24 @@ type Tr = [string, string, string, string];
 const COLUMN: Record<Exclude<Lang, "ko">, number> = { en: 0, ja: 1, zh: 2, vi: 3 };
 
 const D: Record<string, Tr> = {
+  // 원문 보존 및 독자별 번역
+  "원문 보기": ["Show original", "原文を見る", "查看原文", "Xem bản gốc"],
+  "번역하지 못해 원문을 표시해요": ["Translation unavailable. Showing the original.", "翻訳できなかったため原文を表示しています。", "翻译失败，当前显示原文。", "Chưa dịch được. Đang hiển thị bản gốc."],
+  "내 언어로 추천을 번역하고 있어요": ["Translating the suggestion into your language…", "おすすめを選択した言語に翻訳しています…", "正在将推荐翻译为你的语言…", "Đang dịch gợi ý sang ngôn ngữ của bạn…"],
+  "다음 교류 활동 제안": ["Next meetup activity", "次の交流活動の提案", "下次交流活动提议", "Đề xuất hoạt động giao lưu tiếp theo"],
+  "분": ["min", "分", "分钟", "phút"],
+  "함께하는 순서": ["Steps to try together", "一緒に進める手順", "一起进行的步骤", "Các bước cùng thực hiện"],
+  "활동으로 돌아가기": ["Back to activity", "活動に戻る", "返回活动", "Quay lại hoạt động"],
+  "{name}님에게 보낼 제안": ["Your proposal to {name}", "{name}さんへの提案", "发给{name}的提议", "Đề xuất gửi cho {name}"],
+  "편하게 고쳐서 보내세요. 보내기를 눌러야 채팅으로 전송돼요.": ["Edit before sending. It is sent only when you press Send.", "自由に編集できます。送信ボタンを押すとチャットに送られます。", "可以修改，点击发送后才会发到聊天中。", "Bạn có thể chỉnh sửa. Chỉ gửi vào chat khi bấm Gửi."],
+  "채팅으로 제안을 보냈어요": ["Proposal sent", "チャットに提案を送りました", "提议已发到聊天", "Đã gửi đề xuất vào chat"],
+  "채팅으로 제안 보내기": ["Send proposal in chat", "チャットに提案を送る", "发送提议到聊天", "Gửi đề xuất vào chat"],
+  "{name}님과의 대화방으로 가기": ["Open chat with {name}", "{name}さんとのチャットへ", "打开与{name}的聊天", "Mở chat với {name}"],
+  "{name}님에게 채팅으로 제안하기": ["Propose in chat to {name}", "{name}さんにチャットで提案", "向{name}发送聊天提议", "Đề xuất với {name} qua chat"],
+  "괜찮다면 다음에 같이 해볼까요? 바꾸고 싶은 부분이 있으면 편하게 말해 주세요!": ["Would you like to try this together next time? Let me know if you would like to change anything!", "よければ次に一緒にやってみませんか？変えたい部分があれば気軽に教えてください！", "下次一起试试好吗？想调整的地方请随时告诉我！", "Lần tới mình cùng thử nhé? Nếu muốn thay đổi gì thì cứ nói nhé!"],
+  "활동 제안 작성": ["Write an activity proposal", "活動の提案を書く", "编写活动提议", "Viết đề xuất hoạt động"],
+  "자료 없이 만들었다면 어땠을까?": ["What if no sources were used?", "資料なしで作ったら？", "不参考资料会怎样？", "Nếu không dùng tài liệu thì sao?"],
+
   // 만남 약속
   "만남 약속": ["Meetup", "会う約束", "见面安排", "Lịch gặp"],
   "한국 시간 기준": ["Korea time", "韓国時間", "韩国时间", "Giờ Hàn Quốc"],

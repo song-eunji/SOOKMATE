@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { api } from "./api";
+import { textLanguage, translateText } from "./translation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "./i18n";
 import type { MatchView } from "./types";
 
@@ -152,46 +152,58 @@ export function MatchPicker({ matches, activeId, onPick }: { matches: MatchView[
   );
 }
 
-// 같은 문장을 같은 언어로 다시 번역하지 않도록 화면에서도 기억해 둔다
-const trCache = new Map<string, string>();
-
-/** 사람이 쓴 글 아래에 붙이는 '번역 보기' 버튼. 원문은 그대로 두고 번역문만 아래에 보여준다. */
+/** 원문과 화면 언어가 다를 때만 번역 버튼을 표시한다. */
 export function TranslateButton({ text }: { text: string }) {
   const { t, lang } = useI18n();
-  const key = `${lang}\u0000${text}`;
   const [shown, setShown] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (!text.trim()) return null;
-
+  const request = useRef(0);
+  useEffect(() => { request.current++; setShown(null); setBusy(false); setFailed(false); return () => { request.current++; }; }, [text, lang]);
+  const source = textLanguage(text);
+  if (!text.trim() || source === lang || !source) return null;
   const toggle = async () => {
     if (shown !== null) return setShown(null);
-    const hit = trCache.get(key);
-    if (hit) return setShown(hit);
-    setBusy(true);
-    setFailed(false);
+    const token = ++request.current;
+    setBusy(true); setFailed(false);
     try {
-      const r = await api.translate(text);
-      if (r.translated) {
-        trCache.set(key, r.text);
-        setShown(r.text);
-      } else {
-        setFailed(true);
-      }
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
+      const translated = await translateText(text, lang);
+      if (token !== request.current) return;
+      if (translated) setShown(translated); else setFailed(true);
+    } catch { if (token === request.current) setFailed(true); }
+    finally { if (token === request.current) setBusy(false); }
   };
+  return <span className="tr">
+    <button type="button" className="tr-btn" onClick={() => void toggle()} disabled={busy}>{busy ? t("번역하는 중") : shown !== null ? t("원문만 보기") : t("번역 보기")}</button>
+    {shown !== null && <span className="tr-text" lang={lang}>{shown}</span>}
+    {failed && <span className="tr-fail">{t("지금은 번역할 수 없어요")}</span>}
+  </span>;
+}
 
-  return (
-    <span className="tr">
-      <button type="button" className="tr-btn" onClick={toggle} disabled={busy}>
-        {busy ? t("번역하는 중") : shown !== null ? t("원문만 보기") : t("번역 보기")}
-      </button>
-      {shown !== null && <span className="tr-text">{shown}</span>}
-      {failed && <span className="tr-fail">{t("지금은 번역할 수 없어요")}</span>}
-    </span>
-  );
+/** 받은 채팅은 내 언어의 번역문을 먼저 보여주며, 원문은 언제든 확인할 수 있다. */
+export function LocalizedMessage({ text }: { text: string }) {
+  const { t, lang } = useI18n();
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [original, setOriginal] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const source = textLanguage(text);
+  const needsTranslation = Boolean(source && source !== lang);
+  useEffect(() => {
+    let alive = true;
+    setTranslated(null); setOriginal(false); setFailed(false); setBusy(false);
+    if (needsTranslation) {
+      setBusy(true);
+      translateText(text, lang).then((result) => { if (alive) { setTranslated(result); setFailed(!result); } })
+        .catch(() => { if (alive) setFailed(true); }).finally(() => { if (alive) setBusy(false); });
+    }
+    return () => { alive = false; };
+  }, [text, lang, needsTranslation, retry]);
+  return <>
+    <span lang={translated && !original ? lang : source ?? undefined}>{translated && !original ? translated : text}</span>
+    {busy && <span className="tr-text" role="status">{t("번역하는 중")}</span>}
+    {translated && <span className="tr"><button className="tr-btn" type="button" onClick={() => setOriginal((value) => !value)}>{t(original ? "번역 보기" : "원문 보기")}</button></span>}
+    {failed && <span className="tr"><span className="tr-fail">{t("번역하지 못해 원문을 표시해요")}</span><button className="tr-btn" type="button" onClick={() => setRetry((value) => value + 1)}>{t("다시 시도하기")}</button></span>}
+  </>;
 }

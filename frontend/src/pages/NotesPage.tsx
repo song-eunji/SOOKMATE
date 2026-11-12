@@ -1,3 +1,4 @@
+import useLocalizedActivity from "./useLocalizedActivity";
 import Icon from "../Icon";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api, compareActivities, generateActivity, loadActivity } from "../api";
@@ -80,6 +81,8 @@ export default function NotesPage({active, confirmed, onPick, goRec, goChat, fla
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [matchId, screen, busy, saving]);
+  const translatedActivity = useLocalizedActivity(matchId ?? 0, stored);
+  const displayActivity = translatedActivity.localized?.retrieval ?? stored?.retrieval;
   if (!active) return <Lock title={t("만남 뒤, 함께한 순간을 남겨요")} text={t("서로 수락한 상대와 교류 노트를 쓸 수 있어요.")} action={t("상대 추천 보기")} onAction={goRec} />;
   const name = active.partner.name;
   const mineShared = FIELDS.filter((f) => mine?.[f.share] && mine[f.key].trim()).length;
@@ -156,9 +159,11 @@ export default function NotesPage({active, confirmed, onPick, goRec, goChat, fla
         <span className="notes-eyebrow"><span className="notes-num" aria-hidden="true">2</span>{t("위 기록으로 다음 활동 추천받기")}</span>
         {!sharedCount ? <p>{hasMine ? t("공유한 기록이 없어요. 기록을 수정해서 추천에 쓸 항목을 공유해 주세요.") : t("먼저 위에 기록을 남기고 공유를 켜 주세요.")}</p>
         : stored ? <>
-          <h2>{stored.retrieval.title}</h2>
-          <div className="chips">{stored.retrieval.minutes && <span className="chip"><Icon name="clock" /> {t("{n}분", { n: stored.retrieval.minutes })}</span>}{stored.retrieval.prep && <span className="chip">{t("준비물")} · {stored.retrieval.prep}</span>}</div>
-          <p>{stored.retrieval.desc}</p>
+          <h2>{displayActivity?.title}</h2>
+          {translatedActivity.loading && <p role="status" className="hint">{t("내 언어로 추천을 번역하고 있어요")}</p>}
+          {translatedActivity.failed && <p role="status" className="hint">{t("번역하지 못해 원문을 표시해요")}</p>}
+          <div className="chips">{stored.retrieval.minutes && <span className="chip"><Icon name="clock" /> {t("{n}분", { n: stored.retrieval.minutes })}</span>}{stored.retrieval.prep && <span className="chip">{t("준비물")} · {displayActivity?.prep}</span>}</div>
+          <p>{displayActivity?.desc}</p>
           <button className="btn" onClick={openActivity}>{t("자세히 보고 {name}님에게 제안하기", { name })} <span aria-hidden="true">→</span></button>
         </> : <>
           <p>{t("공유한 기록 {n}개(나 {mine} · {name}님 {theirs})를 바탕으로 활동 자료집·위키백과를 찾아보고 20~30분짜리 활동을 만들어요.", { n: sharedCount, mine: mineShared, name, theirs: theirsShared })}</p>
