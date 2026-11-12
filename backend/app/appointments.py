@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from .constants import DAYS, expand_times
 from .db import get_db
-from .models import Appointment, Match, User
+from .models import Appointment, AppointmentEvent, Match, User
 from .scheduling.coordination import serialized
 
 KST = ZoneInfo("Asia/Seoul")
@@ -64,7 +64,10 @@ def snapshot(db, match, me):
         ended = datetime.fromisoformat(f"{row.date}T{row.slot.split('–')[0]}").replace(tzinfo=KST) <= datetime.now(KST)
         proposal = {"date": row.date, "slot": row.slot, "status": row.status, "version": row.version,
                     "mine": row.proposer_id == me.id, "past": ended}
-    return {"available": available(db, match), "proposal": proposal, "timezone": "Asia/Seoul"}
+    events = db.scalars(select(AppointmentEvent).where(AppointmentEvent.match_id == match.id).order_by(AppointmentEvent.id.desc()).limit(30)).all()
+    history = [{"id": e.id, "kind": e.kind, "date": e.date, "slot": e.slot, "mine": e.actor_id == me.id,
+                "created_at": e.created_at.isoformat()} for e in reversed(events)]
+    return {"available": available(db, match), "proposal": proposal, "timezone": "Asia/Seoul", "events": history}
 
 
 @serialized
@@ -99,6 +102,8 @@ def change(db, mid, me, body):
                 raise HTTPException(409, "지난 시간이거나 가능한 시간이 바뀌었어요. 다시 제안해 주세요.")
             row.status = "confirmed" if body.action == "accept" else "declined"
     row.version += 1
+    kind = "proposed" if isinstance(body, ProposalIn) else {"accept": "confirmed", "decline": "declined", "cancel": "cancelled"}[body.action]
+    db.add(AppointmentEvent(match_id=mid, actor_id=me.id, kind=kind, date=row.date, slot=row.slot))
     db.commit()
     return snapshot(db, match, me)
 

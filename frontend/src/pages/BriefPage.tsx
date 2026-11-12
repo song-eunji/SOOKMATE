@@ -132,7 +132,6 @@ export default function BriefPage({ active, confirmed, onPick, goRec, goNote, go
               ) : (
                 <p className="hint">{t("공개한 선호가 없어요. 직접 물어보면 좋아요.")}</p>
               )}
-              <p className="hint">{t("개인 선호가 문화 일반 정보보다 우선이에요. 국적으로 성향을 추정하지 않아요.")}</p>
             </section>
 
             {brief.tips.length > 0 && (

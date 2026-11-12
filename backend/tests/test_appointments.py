@@ -104,3 +104,25 @@ def test_expired_proposal_cannot_be_accepted(client, pair, db):
     db.commit()
     assert client.get(url, headers=h(b)).json()["proposal"]["past"] is True
     assert client.post(url + "/respond", headers=h(b), json={"action": "accept", "version": 1}).status_code == 409
+
+
+def test_events_are_recorded_in_order_for_both_people(client, pair):
+    mid, a, b = pair
+    url = f"/api/matches/{mid}/appointment"
+    client.post(url, headers=h(a), json=body(client, pair))
+    client.post(url + "/respond", headers=h(b), json={"action": "accept", "version": 1})
+    client.post(url + "/respond", headers=h(a), json={"action": "cancel", "version": 2})
+    mine = client.get(url, headers=h(a)).json()["events"]
+    theirs = client.get(url, headers=h(b)).json()["events"]
+    assert [e["kind"] for e in mine] == ["proposed", "confirmed", "cancelled"]
+    assert [e["mine"] for e in mine] == [True, False, True]
+    assert [e["mine"] for e in theirs] == [False, True, False]
+    assert all(e["date"] and e["slot"] and e["created_at"] for e in mine)
+
+
+def test_failed_response_records_nothing(client, pair):
+    mid, a, b = pair
+    url = f"/api/matches/{mid}/appointment"
+    client.post(url, headers=h(a), json=body(client, pair))
+    client.post(url + "/respond", headers=h(a), json={"action": "accept", "version": 1})  # 403
+    assert [e["kind"] for e in client.get(url, headers=h(a)).json()["events"]] == ["proposed"]

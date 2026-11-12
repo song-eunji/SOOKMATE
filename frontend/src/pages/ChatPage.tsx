@@ -1,6 +1,6 @@
 import Icon from "../Icon";
 import { useEffect, useRef, useState } from "react";
-import { api, loadActivity, wsUrl } from "../api";
+import { api, getAppointment, loadActivity, wsUrl, type AppointmentEvent } from "../api";
 import { ActivityBody, proposalText } from "./ActivityResults";
 import { TranslateButton } from "../components";
 import { useI18n } from "../i18n";
@@ -40,16 +40,24 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
   }, [matchId]);
   if (stored === undefined) return null;
   if (!stored) return (
-    <div className="chat-pin empty">
-      <span><Icon name="pin" /> {t("아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.")}</span>
-      <button className="link" onClick={goNote}>{t("노트 쓰러 가기 →")}</button>
-    </div>
+    <section className="chat-pin empty" aria-label={t("다음 활동 추천")}>
+      <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span><small>{t("다음 활동 추천")}</small></span>
+        <span className="chat-pin-toggle" aria-hidden="true"><Icon name={open ? "up" : "down"} /></span>
+      </button>
+      {open && (
+        <div className="chat-pin-body">
+          <p>{t("아직 다음 활동 추천이 없어요. 교류 노트에 기록을 공유하면 추천받을 수 있어요.")}</p>
+          <button className="link" onClick={goNote}>{t("노트 쓰러 가기 →")}</button>
+        </div>
+      )}
+    </section>
   );
   const act = stored.retrieval;
   return (
     <section className={`chat-pin${open ? " open" : ""}`} aria-label={t("다음 활동 추천")}>
       <button className="chat-pin-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <span><small><Icon name="pin" /> {t("다음 활동 추천")}</small><b>{act.title}</b></span>
+        <span><small>{t("다음 활동 추천")}</small><b>{act.title}</b></span>
         <span className="chat-pin-toggle" aria-hidden="true"><Icon name={open ? "up" : "down"} /></span>
       </button>
       {open && (
@@ -66,8 +74,9 @@ function ActivityPin({ matchId, partnerName, onSend, goNote }: { matchId: number
 }
 
 export default function ChatPage({ me, active, onChanged, flash, goNote, picked = [] }: Props) {
-  const { t, clock } = useI18n();
+  const { t, clock, lang } = useI18n();
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
+  const [events, setEvents] = useState<AppointmentEvent[]>([]);
   const [draft, setDraft] = useState("");
   const ws = useRef<WebSocket | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -130,9 +139,31 @@ export default function ChatPage({ me, active, onChanged, flash, goNote, picked 
     };
   }, [matchId, me.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 약속 제안·확정 기록을 가져와 대화 사이에 카드로 보여준다
+  useEffect(() => {
+    let alive = true;
+    setEvents([]);
+    const load = () => {
+      if (document.visibilityState !== "visible") return;
+      getAppointment(matchId).then((s) => { if (alive) setEvents(s.events ?? []); }).catch(() => undefined);
+    };
+    load();
+    const timer = window.setInterval(load, 8000);
+    window.addEventListener("focus", load);
+    window.addEventListener("appointment-changed", load);
+    return () => { alive = false; clearInterval(timer); window.removeEventListener("focus", load); window.removeEventListener("appointment-changed", load); };
+  }, [matchId]);
+
+  type Item = { at: string; order: number; msg?: ChatMessage; event?: AppointmentEvent };
+  const timeline: Item[] = [
+    ...msgs.map((m): Item => ({ at: m.created_at, order: m.id, msg: m })),
+    ...events.map((e): Item => ({ at: e.created_at, order: e.id, event: e })),
+  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.msg && b.event ? -1 : a.event && b.msg ? 1 : a.order - b.order));
+  const when = (e: AppointmentEvent) => `${new Date(`${e.date}T12:00:00+09:00`).toLocaleDateString(lang, { month: "short", day: "numeric", weekday: "short", timeZone: "Asia/Seoul" })} · ${e.slot}`;
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "nearest" });
-  }, [msgs.length]);
+  }, [msgs.length, events.length]);
 
   const partner = active.partner;
 
@@ -160,7 +191,23 @@ export default function ChatPage({ me, active, onChanged, flash, goNote, picked 
 
       <div className="log">
         <div className="msg sys">{t("양쪽이 수락해서 대화방이 열렸어요. 시간과 장소를 정해 보세요.")}</div>
-        {msgs.map((m) => {
+        {timeline.map((item) => {
+          const ev = item.event;
+          if (ev) {
+            return ev.kind === "confirmed" ? (
+              <div key={`e${ev.id}`} className="appt-msg confirmed" role="status">
+                <b><Icon name="check" size={15} /> {t("약속이 확정됐어요")}</b>
+                <strong>{when(ev)}</strong>
+                <small>{t("{name}님과 만나요", { name: partner.name })} · {t("한국 시간 기준")}</small>
+              </div>
+            ) : (
+              <div key={`e${ev.id}`} className={`appt-msg ${ev.kind}`} role="status">
+                <span>{ev.kind === "proposed" ? (ev.mine ? t("내가 만남 시간을 제안했어요") : t("{name}님이 만남 시간을 제안했어요", { name: partner.name })) : ev.kind === "declined" ? t("제안이 거절됐어요") : t("약속이 취소됐어요")}</span>
+                <small>{when(ev)}</small>
+              </div>
+            );
+          }
+          const m = item.msg as ChatMessage;
           const mine = m.sender_id === me.id;
           return (
             <div key={m.id} className={`line ${mine ? "me" : "them"}`}>

@@ -144,7 +144,7 @@ export default function NotesPage({active, confirmed, onPick, goRec, goChat, fla
 
   return <div className="notes-home">
     <MatchPicker matches={confirmed} activeId={active.id} onPick={onPick} />
-    <header className="notes-intro"><span className="notes-eyebrow">{t("교류 노트")}</span><h1>{t("{name}님과의 교류 노트", { name })}</h1><p>{t("만남에서 배운 것을 남겨요. 공유한 기록으로 다음에 함께할 활동을 추천해 드려요.")}</p></header>
+    <header className="notes-intro"><span className="notes-eyebrow">{t("교류 노트")}</span><h1>{t("{name}님과의 교류 노트", { name })}</h1><p>{t("만남에서 배운 것을 남겨요. 공유한 기록으로 다음에 함께할 활동을 추천해 드려요.").replace(/([.。])\s*/, "$1\n")}</p></header>
     {loading ? <p role="status">{t("우리 기록을 불러오는 중이에요…")}</p> : <>
       <section className="notes-panel"><div className="notes-section-head"><h2><span className="notes-num" aria-hidden="true">1</span>{t("내 기록")}</h2>{mine && <button className="link" onClick={openEditor}>{t("수정하기")}</button>}</div>
         {mine ? <div className="notes-entries">{FIELDS.filter((f) => mine[f.key].trim()).map((f) => <article key={f.key}><div className="notes-entry-label"><span>{t(f.label)}</span><small className={mine[f.share] ? "note-shared" : "note-private"}>{mine[f.share] ? t("공유함 · 추천에 사용") : t("나만 보기 · 추천에 안 씀")}</small></div><p>{mine[f.key]}</p></article>)}</div>
