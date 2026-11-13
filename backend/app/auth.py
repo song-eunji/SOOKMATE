@@ -18,6 +18,7 @@ import smtplib
 from datetime import timedelta
 from email.message import EmailMessage
 
+import httpx
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -104,7 +105,26 @@ def check_code(db: Session, email: str, code: str) -> None:
 
 
 # ----------------------------------------------------------------------- 메일 발송
+def _send_via_brevo(api_key: str, sender: str, to: str, subject: str, body: str) -> None:
+    """Brevo 메일 API(HTTPS)로 보낸다. 무료 호스팅이 SMTP 포트를 막아도 443 포트로 나가서 막히지 않는다."""
+    if not sender:
+        raise MailNotConfigured()
+    r = httpx.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={"api-key": api_key, "accept": "application/json", "content-type": "application/json"},
+        json={"sender": {"name": os.getenv("MAIL_FROM_NAME", "SOOKMATE"), "email": sender}, "to": [{"email": to}],
+              "subject": subject, "textContent": body},
+        timeout=15,
+    )
+    if r.status_code >= 400:  # 원인을 로그에서 바로 알 수 있게 응답 내용을 남긴다(키는 넣지 않는다)
+        raise RuntimeError(f"Brevo 메일 API 오류 {r.status_code}: {r.text[:300]}")
+
+
 def send_mail(to: str, subject: str, body: str) -> None:
+    api_key = os.getenv("BREVO_API_KEY")
+    if api_key:  # API 키가 있으면 SMTP 대신 HTTPS 로 보낸다
+        _send_via_brevo(api_key, os.getenv("MAIL_FROM") or os.getenv("SMTP_USER", ""), to, subject, body)
+        return
     host = os.getenv("SMTP_HOST")
     if not host:
         raise MailNotConfigured()
